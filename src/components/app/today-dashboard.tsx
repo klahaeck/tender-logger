@@ -14,6 +14,7 @@ import { Input } from "@/components/ui/input";
 import { Progress } from "@/components/ui/progress";
 import { formatDay, formatTime, isValidLocalDate, shiftLocalDate } from "@/lib/domain/dates";
 import { fetchDashboard } from "@/lib/fetchers";
+import { sortRoutineItemsByTime } from "@/lib/domain/routines";
 import type { DashboardData } from "@/lib/domain/types";
 
 function childNames(ids: string[], data: DashboardData) {
@@ -146,7 +147,7 @@ export function TodayDashboard({ date, today, initialData }: { date: string; tod
           </div>
         </div>
         <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-          {data.tasks.map((task) => {
+          {sortRoutineItemsByTime(data.tasks).map((task) => {
             const recorded = Boolean(task.entry);
             const trigger = (
               <button className="group flex w-full items-center gap-4 rounded-2xl border bg-card p-4 text-left shadow-sm transition hover:-translate-y-0.5 hover:border-primary/30 hover:shadow-md">

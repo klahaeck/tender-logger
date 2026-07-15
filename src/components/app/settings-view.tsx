@@ -14,6 +14,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Switch } from "@/components/ui/switch";
 import { CAREGIVER_RELATIONSHIPS } from "@/lib/domain/constants";
 import { ageOnDate, localDateInTimezone } from "@/lib/domain/dates";
+import { sortRoutineItemsByTime } from "@/lib/domain/routines";
 import type { SettingsData } from "@/lib/domain/types";
 
 type EditableCaregiver = {
@@ -74,7 +75,7 @@ function editableChildren(items: SettingsData["children"]): EditableChild[] {
 }
 
 function editableRoutineItems(items: SettingsData["template"]["items"]): EditableRoutineItem[] {
-  return items.map((item) => ({
+  return sortRoutineItemsByTime(items).map((item) => ({
     clientKey: item.id,
     id: item.id,
     label: item.label,
@@ -258,13 +259,13 @@ export function SettingsView({ data, timezones }: { data: SettingsData; timezone
                   <div key={item.clientKey} className="grid gap-3 rounded-lg bg-muted/40 p-3 sm:grid-cols-[auto_1fr_7rem_auto] sm:items-center">
                     <Switch checked={item.active} onCheckedChange={(checked) => setRoutineItems((current) => current.map((value, itemIndex) => itemIndex === index ? { ...value, active: checked } : value))} aria-label={`Enable ${item.label}`} />
                     <Input required value={item.label} onChange={(event) => setRoutineItems((current) => current.map((value, itemIndex) => itemIndex === index ? { ...value, label: event.target.value } : value))} aria-label="Routine label" />
-                    <Input required type="time" value={item.suggestedTime} onChange={(event) => setRoutineItems((current) => current.map((value, itemIndex) => itemIndex === index ? { ...value, suggestedTime: event.target.value } : value))} aria-label={`Suggested time for ${item.label || "new routine item"}`} />
+                    <Input required type="time" value={item.suggestedTime} onChange={(event) => setRoutineItems((current) => sortRoutineItemsByTime(current.map((value) => value.clientKey === item.clientKey ? { ...value, suggestedTime: event.target.value } : value)))} aria-label={`Suggested time for ${item.label || "new routine item"}`} />
                     <Button type="button" variant="ghost" size="icon-sm" className="text-destructive hover:text-destructive" aria-label={`Remove ${item.label || "routine item"}`} onClick={() => setRoutineItems((current) => current.filter((value) => value.clientKey !== item.clientKey))}><Trash2 className="size-4" /></Button>
                     <div className="flex flex-wrap gap-2 sm:col-start-2 sm:col-span-3">{children.map((child) => { const selected = item.childIds.includes(child.id); return <Button key={child.id} type="button" size="xs" variant={selected ? "secondary" : "outline"} onClick={() => setRoutineItems((current) => current.map((value, itemIndex) => itemIndex === index ? { ...value, childIds: selected ? value.childIds.filter((id) => id !== child.id) : [...value.childIds, child.id] } : value))}>{child.displayName || "Unnamed child"}</Button>; })}</div>
                   </div>
                 ))}
               </div>
-              <Button type="button" variant="outline" size="sm" className="mt-3" onClick={() => setRoutineItems((current) => [...current, { clientKey: crypto.randomUUID(), label: "", suggestedTime: "08:00", childIds: children.map((child) => child.id), active: true }])}><Plus className="size-4" />Add routine item</Button>
+              <Button type="button" variant="outline" size="sm" className="mt-3" onClick={() => setRoutineItems((current) => sortRoutineItemsByTime([...current, { clientKey: crypto.randomUUID(), label: "", suggestedTime: "08:00", childIds: children.map((child) => child.id), active: true }]))}><Plus className="size-4" />Add routine item</Button>
             </div>
             <div className="flex items-start justify-between gap-4 rounded-xl border p-4"><div><p className="flex items-center gap-2 text-sm font-medium"><LockKeyhole className="size-4" />Allow permanent deletion</p><p className="mt-1 text-xs leading-5 text-muted-foreground">Disabled by default. Purges require owner access, MFA, a reason, and typed confirmation.</p></div><Switch checked={hardDeleteEnabled} onCheckedChange={setHardDeleteEnabled} aria-label="Allow permanent deletion" /></div>
             {message && <p className="text-sm text-muted-foreground">{message}</p>}

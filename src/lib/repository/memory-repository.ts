@@ -56,23 +56,21 @@ function latestTemplate(data: ParentingState) {
   return [...data.templates].sort((a, b) => b.version - a.version)[0];
 }
 
-function templateForDate(data: ParentingState, date: string) {
-  return (
-    [...data.templates]
-      .filter((template) => template.effectiveFrom <= date)
-      .sort((a, b) => b.version - a.version)[0] ??
-    [...data.templates].sort((a, b) => a.version - b.version)[0]
-  );
-}
-
 function ensureDailyLog(data: ParentingState, date: string): DailyLog {
   const existing = data.dailyLogs.find((log) => log.localDate === date);
-  if (existing) return existing;
+  const latestVersion = latestTemplate(data).version;
+  if (existing) {
+    const hasEntries = data.careEntries.some((entry) => entry.dailyLogId === existing.id);
+    if (existing.status === "open" && !hasEntries) {
+      existing.templateVersion = latestVersion;
+    }
+    return existing;
+  }
   const created: DailyLog = {
     id: id("daily"),
     workspaceId: data.workspace.id,
     localDate: date,
-    templateVersion: templateForDate(data, date).version,
+    templateVersion: latestVersion,
     status: "open",
   };
   data.dailyLogs.push(created);
@@ -106,7 +104,7 @@ export class MemoryParentingRepository implements ParentingRepository {
     const dailyLog = ensureDailyLog(data, date);
     const template =
       data.templates.find((item) => item.version === dailyLog.templateVersion) ??
-      templateForDate(data, date);
+      latestTemplate(data);
     const weekday = new Date(`${date}T12:00:00`).getDay();
     const tasks = template.items
       .filter((item) => item.active && item.weekdays.includes(weekday))

@@ -230,7 +230,7 @@ describe("memory repository integration", () => {
     expect((await repository.getDashboard(context, "2026-07-15")).caregivers).toHaveLength(3);
   });
 
-  it("keeps historical days bound to their original routine version", async () => {
+  it("uses the latest routine for empty historical days and freezes it after an entry", async () => {
     const repository = new MemoryParentingRepository();
     const context = await repository.resolveContext(identity);
     const today = localDateInTimezone(new Date(), context.workspace.timezone);
@@ -239,7 +239,6 @@ describe("memory repository integration", () => {
     const historical = await repository.getDashboard(context, historicalDate);
     const originalToday = await repository.getDashboard(context, today);
     const originalTodayVersion = originalToday.dailyLog.templateVersion;
-    const originalLabel = historical.tasks[0].label;
     const settings = await repository.getSettings(context);
 
     const updatedSettings = await repository.updateSettings(context, {
@@ -300,7 +299,9 @@ describe("memory repository integration", () => {
     const reopenedHistorical = await repository.getDashboard(context, historicalDate);
     const refreshedToday = await repository.getDashboard(context, today);
     const nextDay = await repository.getDashboard(context, nextDayDate);
-    expect(reopenedHistorical.tasks[0].label).toBe(originalLabel);
+    expect(reopenedHistorical.tasks.some((task) => task.id === settings.template.items[0].id)).toBe(false);
+    expect(reopenedHistorical.tasks[0].label).toBe("Updated routine label");
+    expect(reopenedHistorical.tasks.at(-1)?.label).toBe("Evening walk");
     expect(refreshedToday.tasks.some((task) => task.id === settings.template.items[0].id)).toBe(false);
     expect(refreshedToday.tasks.at(-1)?.label).toBe("Evening walk");
     expect(originalTodayVersion).toBe(1);
@@ -313,7 +314,7 @@ describe("memory repository integration", () => {
       sortOrder: settings.template.items.length,
     });
     expect(nextDay.tasks.at(-1)?.id).toMatch(/^routine_/);
-    expect(reopenedHistorical.dailyLog.templateVersion).toBe(1);
+    expect(reopenedHistorical.dailyLog.templateVersion).toBe(2);
     expect(nextDay.dailyLog.templateVersion).toBe(2);
 
     const historicalEntry = await repository.createCareEntry(context, {
@@ -327,6 +328,33 @@ describe("memory repository integration", () => {
     });
     expect(historicalEntry.dailyLogId).toBe(historical.dailyLog.id);
     expect(historicalEntry.lateEntry).toBe(true);
+
+    const thirdVersion = await repository.updateSettings(context, {
+      name: savedAgain.workspace.name,
+      timezone: savedAgain.workspace.timezone,
+      hardDeleteEnabled: savedAgain.workspace.hardDeleteEnabled,
+      children: savedAgain.children.map((child) => ({
+        id: child.id,
+        displayName: child.displayName,
+        birthdate: child.birthdate,
+      })),
+      caregivers: savedAgain.caregivers.map((caregiver) => ({
+        id: caregiver.id,
+        displayName: caregiver.displayName,
+        relationship: caregiver.relationship,
+      })),
+      routineItems: savedAgain.template.items.map((item, index) => ({
+        id: item.id,
+        label: index === 0 ? "Newest routine label" : item.label,
+        suggestedTime: item.suggestedTime,
+        childIds: item.childIds,
+        active: item.active,
+      })),
+    });
+    const lockedHistorical = await repository.getDashboard(context, historicalDate);
+    expect(thirdVersion.template.version).toBe(3);
+    expect(lockedHistorical.dailyLog.templateVersion).toBe(2);
+    expect(lockedHistorical.tasks[0].label).toBe("Updated routine label");
   });
 
   it("keeps a finalized today log bound to its original routine version", async () => {

@@ -20,6 +20,12 @@ test("shows saved routine changes on Today", async ({ page }, testInfo) => {
   const marker = Date.now().toString();
 
   await page.goto("/");
+  const dateInput = page.getByRole("textbox", { name: "Log date", exact: true });
+  const today = await dateInput.inputValue();
+  const [year, month, day] = today.split("-").map(Number);
+  const previous = new Date(Date.UTC(year, month - 1, day - 1)).toISOString().slice(0, 10);
+  await dateInput.fill(previous);
+  await expect(page.getByRole("textbox", { name: "Log date", exact: true })).toHaveValue(previous);
   await page.getByRole("link", { name: "Settings" }).click();
   const firstRoutine = page.getByLabel("Routine label").first();
   const originalLabel = await firstRoutine.inputValue();
@@ -29,6 +35,9 @@ test("shows saved routine changes on Today", async ({ page }, testInfo) => {
   await expect(page.getByText("Settings saved.", { exact: true })).toBeVisible();
 
   await page.getByRole("link", { name: "Today" }).click();
+  await expect(page.getByText(updatedLabel, { exact: true })).toBeVisible();
+  await expect(page.getByText(originalLabel, { exact: true })).toHaveCount(0);
+  await page.getByRole("textbox", { name: "Log date", exact: true }).fill(previous);
   await expect(page.getByText(updatedLabel, { exact: true })).toBeVisible();
   await expect(page.getByText(originalLabel, { exact: true })).toHaveCount(0);
 

@@ -113,15 +113,11 @@ export class MongoParentingRepository implements ParentingRepository {
         .sort({ occurredAt: -1 })
         .toArray(),
     ]);
-    const template = await this.templateForDate(context, date);
-    const dailyLog = await this.ensureDailyLog(context, date, template.version);
-    const dailyTemplate =
-      dailyLog.templateVersion === template.version
-        ? template
-        : await (await col<RoutineTemplate>("routineTemplates")).findOne({
-            workspaceId: context.workspace.id,
-            version: dailyLog.templateVersion,
-          });
+    const dailyLog = await this.ensureDailyLog(context, date);
+    const dailyTemplate = await (await col<RoutineTemplate>("routineTemplates")).findOne({
+      workspaceId: context.workspace.id,
+      version: dailyLog.templateVersion,
+    });
     if (!dailyTemplate) throw new Error("ROUTINE_TEMPLATE_NOT_FOUND");
     const dayEntries = entries.filter((entry) => entry.dailyLogId === dailyLog.id);
     const weekday = new Date(`${date}T12:00:00`).getDay();
@@ -305,8 +301,7 @@ export class MongoParentingRepository implements ParentingRepository {
 
   async createCareEntry(context: RequestContext, input: CareEntryInput) {
     requireOwner(context.member.role);
-    const template = await this.templateForDate(context, input.localDate);
-    const log = await this.ensureDailyLog(context, input.localDate, template.version);
+    const log = await this.ensureDailyLog(context, input.localDate);
     const recordedAt = new Date().toISOString();
     const recordId = id("care");
     const revision = this.initialRevision(
@@ -438,8 +433,7 @@ export class MongoParentingRepository implements ParentingRepository {
 
   async finalizeDailyLog(context: RequestContext, localDate: string) {
     requireOwner(context.member.role);
-    const template = await this.templateForDate(context, localDate);
-    const log = await this.ensureDailyLog(context, localDate, template.version);
+    const log = await this.ensureDailyLog(context, localDate);
     if (log.status === "finalized") return toPlainData(log);
     const finalizedAt = new Date().toISOString();
     await this.transaction(async (session) => {
@@ -768,16 +762,34 @@ export class MongoParentingRepository implements ParentingRepository {
   private async ensureDailyLog(
     context: RequestContext,
     localDate: string,
-    templateVersion: number,
   ) {
     const logs = await col<DailyLog>("dailyLogs");
+    const latestTemplate = await (await col<RoutineTemplate>("routineTemplates")).findOne(
+      { workspaceId: context.workspace.id },
+      { sort: { version: -1 } },
+    );
+    if (!latestTemplate) throw new Error("ROUTINE_TEMPLATE_NOT_FOUND");
     const existing = await logs.findOne({ workspaceId: context.workspace.id, localDate });
-    if (existing) return existing;
+    if (existing) {
+      if (existing.status !== "open" || existing.templateVersion === latestTemplate.version) {
+        return existing;
+      }
+      const hasEntry = await (await col<CareEntry>("careEntries")).findOne({
+        workspaceId: context.workspace.id,
+        dailyLogId: existing.id,
+      });
+      if (hasEntry) return existing;
+      await logs.updateOne(
+        { id: existing.id, workspaceId: context.workspace.id, status: "open" },
+        { $set: { templateVersion: latestTemplate.version } },
+      );
+      return { ...existing, templateVersion: latestTemplate.version };
+    }
     const log: DailyLog = {
       id: id("daily"),
       workspaceId: context.workspace.id,
       localDate,
-      templateVersion,
+      templateVersion: latestTemplate.version,
       status: "open",
     };
     try {
@@ -788,24 +800,6 @@ export class MongoParentingRepository implements ParentingRepository {
       if (!concurrent) throw new Error("DAILY_LOG_CREATE_FAILED");
       return concurrent;
     }
-  }
-
-  private async templateForDate(context: RequestContext, localDate: string) {
-    const templates = await col<RoutineTemplate>("routineTemplates");
-    const template =
-      (await templates.findOne(
-        {
-          workspaceId: context.workspace.id,
-          effectiveFrom: { $lte: localDate },
-        },
-        { sort: { version: -1 } },
-      )) ??
-      (await templates.findOne(
-        { workspaceId: context.workspace.id },
-        { sort: { version: 1 } },
-      ));
-    if (!template) throw new Error("ROUTINE_TEMPLATE_NOT_FOUND");
-    return template;
   }
 
   private initialRevision(
