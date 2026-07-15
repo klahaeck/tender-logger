@@ -1,6 +1,6 @@
 import "server-only";
 
-import { getIdentity } from "@/lib/auth/identity";
+import { clerkConfigured, getIdentity } from "@/lib/auth/identity";
 import { mongoConfigured } from "@/lib/db/mongodb";
 import type { ParentingRepository, RequestContext } from "./repository";
 import { MemoryParentingRepository } from "./memory-repository";
@@ -12,10 +12,11 @@ export async function getRepository(): Promise<ParentingRepository> {
   if (mongoConfigured()) {
     const { MongoParentingRepository } = await import("./mongo-repository");
     repository = new MongoParentingRepository();
-  } else {
-    repository = new MemoryParentingRepository();
+    return repository;
   }
-  return repository!;
+  if (clerkConfigured()) throw new Error("MONGODB_REQUIRED");
+  repository = new MemoryParentingRepository();
+  return repository;
 }
 
 export async function getRequestContext(): Promise<RequestContext> {

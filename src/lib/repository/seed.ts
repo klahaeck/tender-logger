@@ -1,5 +1,10 @@
 import { CARE_TASKS } from "@/lib/domain/constants";
-import { createAuditHash, createRevisionHash, id } from "@/lib/domain/integrity";
+import {
+  createAuditHash,
+  createRevisionHash,
+  id,
+  sha256,
+} from "@/lib/domain/integrity";
 import { localDateInTimezone } from "@/lib/domain/dates";
 import type {
   Appointment,
@@ -40,32 +45,60 @@ function createSeedRevision(
   recordId: string,
   payload: Record<string, unknown>,
   recordedAt: string,
+  workspaceId: string,
+  authorId: string,
 ): RecordRevision {
   return {
     id: id("rev"),
-    workspaceId: "workspace_local",
+    workspaceId,
     recordType,
     recordId,
     revisionNumber: 1,
     payload,
     reason: "Initial record",
-    authorId: "member_owner",
+    authorId,
     recordedAt,
-    hash: createRevisionHash({ payload, authorId: "member_owner", recordedAt }),
+    hash: createRevisionHash({ payload, authorId, recordedAt }),
   };
 }
 
-export function createSeedState(demo = true): ParentingState {
+export interface SeedIdentity {
+  authUserId: string;
+  email: string;
+  displayName: string;
+}
+
+export function createSeedState(
+  demo = true,
+  identity?: SeedIdentity,
+): ParentingState {
   const now = new Date();
   const nowIso = now.toISOString();
   const timezone = "America/Chicago";
   const localDate = localDateInTimezone(now, timezone);
+  const identityKey = identity
+    ? sha256(identity.authUserId).slice(0, 32)
+    : undefined;
+  const workspaceId = identityKey
+    ? `workspace_${identityKey}`
+    : "workspace_local";
+  const ownerId = identityKey ? `member_${identityKey}` : "member_owner";
+  const childId = identityKey ? `child_${identityKey}` : "child_one";
+  const ownerCaregiverId = identityKey
+    ? `caregiver_owner_${identityKey}`
+    : "caregiver_owner";
+  const otherCaregiverId = identityKey
+    ? `caregiver_other_${identityKey}`
+    : "caregiver_other";
+  const templateId = identityKey
+    ? `template_${identityKey}_v1`
+    : "template_v1";
 
   const workspace: Workspace = {
-    id: "workspace_local",
+    id: workspaceId,
     name: demo ? "Sample family workspace" : "My family workspace",
     timezone,
-    ownerId: "member_owner",
+    ownerId,
     hardDeleteEnabled: false,
     createdAt: nowIso,
     updatedAt: nowIso,
@@ -74,11 +107,12 @@ export function createSeedState(demo = true): ParentingState {
 
   const members: Member[] = [
     {
-      id: "member_owner",
+      id: ownerId,
       workspaceId: workspace.id,
-      authUserId: "demo_owner",
-      email: "owner@example.local",
-      displayName: demo ? "Demo owner" : "Owner",
+      authUserId: identity?.authUserId ?? "demo_owner",
+      email: identity?.email.toLowerCase() ?? "owner@example.local",
+      displayName:
+        identity?.displayName ?? (demo ? "Demo owner" : "Owner"),
       role: "owner",
       status: "active",
     },
@@ -86,7 +120,7 @@ export function createSeedState(demo = true): ParentingState {
 
   const children: Child[] = [
     {
-      id: "child_one",
+      id: childId,
       workspaceId: workspace.id,
       displayName: "Child One",
       birthdate: demo ? "2018-01-01" : localDate,
@@ -98,7 +132,7 @@ export function createSeedState(demo = true): ParentingState {
 
   const caregivers: Caregiver[] = [
     {
-      id: "caregiver_owner",
+      id: ownerCaregiverId,
       workspaceId: workspace.id,
       displayName: "Parent A",
       relationship: "Parent",
@@ -106,7 +140,7 @@ export function createSeedState(demo = true): ParentingState {
       active: true,
     },
     {
-      id: "caregiver_other",
+      id: otherCaregiverId,
       workspaceId: workspace.id,
       displayName: "Parent B",
       relationship: "Parent",
@@ -116,13 +150,15 @@ export function createSeedState(demo = true): ParentingState {
   ];
 
   const template: RoutineTemplate = {
-    id: "template_v1",
+    id: templateId,
     workspaceId: workspace.id,
     version: 1,
     effectiveFrom: localDate,
     createdAt: nowIso,
     items: CARE_TASKS.map((task, index) => ({
-      id: `routine_${task.key}`,
+      id: identityKey
+        ? `routine_${identityKey}_${task.key}`
+        : `routine_${task.key}`,
       taskKey: task.key,
       label: task.label,
       childIds: children.map((child) => child.id),
@@ -134,7 +170,9 @@ export function createSeedState(demo = true): ParentingState {
   };
 
   const dailyLog: DailyLog = {
-    id: `daily_${localDate}`,
+    id: identityKey
+      ? `daily_${identityKey}_${localDate}`
+      : `daily_${localDate}`,
     workspaceId: workspace.id,
     localDate,
     templateVersion: 1,
@@ -175,7 +213,14 @@ export function createSeedState(demo = true): ParentingState {
         occurredAt,
         notes: "Sample record — replace this workspace before real use.",
       };
-      const revision = createSeedRevision("care_entry", recordId, payload, nowIso);
+      const revision = createSeedRevision(
+        "care_entry",
+        recordId,
+        payload,
+        nowIso,
+        workspace.id,
+        members[0].id,
+      );
       revisions.push(revision);
       careEntries.push({
         id: recordId,

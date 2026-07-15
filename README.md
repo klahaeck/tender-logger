@@ -7,6 +7,7 @@ It is a recordkeeping tool, not legal advice, an emergency service, or a guarant
 ## What is implemented
 
 - Per-child daily routine templates and a fast “Today” checklist
+- An isolated private workspace for every authenticated owner account
 - Previous-day navigation with historical templates, future-date prevention, and visible late-entry timestamps
 - Caregiver attribution, actual occurrence time, duration, outcomes, and factual notes
 - Scheduled appointments with responsibility and attendance outcomes
@@ -48,10 +49,10 @@ MongoDB integration tests run when `TEST_MONGODB_URI` is present. Browser tests 
 Copy `.env.example` to `.env.local` for development. Configure the same values in Vercel for production.
 
 1. Create a dedicated MongoDB Atlas database and least-privilege application user.
-2. Create a Clerk application, disable unrestricted registration, enable MFA, and configure the owner email.
+2. Create a Clerk application, enable MFA, and choose whether accounts are created through Clerk invitations or self-service registration.
 3. Create a Vercel Private Blob store.
 4. Deploy to Vercel. Workflow SDK routes are generated during the Next.js build.
-5. Sign in with `APP_OWNER_EMAIL`; the first matching login bootstraps the private workspace and its initial routine template.
+5. Sign in with each owner account. Its first login bootstraps a separate private workspace and initial routine template. A user matching a pending reviewer invitation joins that workspace as a read-only reviewer instead.
 6. Replace placeholder child and caregiver names in Settings before entering real records.
 
 Vercel Workflows use the deployment’s managed workflow backend automatically. Private Blob supports either the legacy read/write token or Vercel OIDC plus a store ID.
@@ -71,7 +72,8 @@ Hard purge is disabled by default. When enabled, it removes active record conten
 - Validated Server Actions for mutations and authenticated GET Route Handlers for reads
 - Native MongoDB Node.js driver with Stable API and transactional record/revision/audit writes
 - Clerk identity with application roles stored in MongoDB
+- Per-account MongoDB workspaces with repository-level tenant isolation
 - Vercel Private Blob for original files and report artifacts
 - React PDF, JSZip, and Vercel Workflow SDK for evidence packages
 
-The repository adapter automatically selects MongoDB when `MONGODB_URI` is configured; otherwise it uses the development-only memory adapter.
+The repository adapter uses MongoDB when `MONGODB_URI` is configured. The development-only memory adapter is available only when Clerk is not configured, preventing authenticated users from ever sharing demo state.

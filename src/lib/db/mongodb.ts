@@ -48,6 +48,14 @@ export async function collection<T extends Document>(
 export async function ensureMongoIndexes(): Promise<void> {
   const db = await getDatabase();
   await Promise.all([
+    db.collection("workspaces").createIndex(
+      { id: 1 },
+      { unique: true, name: "workspace_id_unique" },
+    ),
+    db.collection("members").createIndex(
+      { id: 1 },
+      { unique: true, name: "member_id_unique" },
+    ),
     db.collection("members").createIndex(
       { workspaceId: 1, email: 1 },
       { unique: true, name: "workspace_email_unique" },

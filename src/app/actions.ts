@@ -35,6 +35,8 @@ function fail(error: unknown): ActionResult<never> {
   const safe: Record<string, string> = {
     FORBIDDEN: "You do not have permission to perform this action.",
     UNAUTHENTICATED: "Please sign in to continue.",
+    MONGODB_REQUIRED:
+      "MongoDB must be configured before authenticated accounts can use the app.",
     NOT_FOUND: "The requested record was not found.",
     ALREADY_INVITED: "That reviewer already has access or a pending invitation.",
     HARD_DELETE_DISABLED: "Hard deletion is disabled in workspace settings.",

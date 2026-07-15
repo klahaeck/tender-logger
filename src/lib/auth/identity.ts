@@ -18,7 +18,7 @@ export async function getIdentity(): Promise<Identity> {
   if (!clerkConfigured()) {
     return {
       authUserId: "demo_owner",
-      email: process.env.APP_OWNER_EMAIL ?? "owner@example.local",
+      email: "owner@example.local",
       displayName: "Demo owner",
       mfaEnabled: true,
       demo: true,

@@ -7,7 +7,6 @@ import {
   ClipboardCheck,
   Clock3,
   FileText,
-  HeartHandshake,
   Menu,
   Settings,
   ShieldAlert,
@@ -17,6 +16,7 @@ import { UserButton } from "@clerk/nextjs";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
+import { BrandLogo } from "@/components/app/brand-logo";
 import { cn } from "@/lib/utils";
 import type { Member, Workspace } from "@/lib/domain/types";
 
@@ -68,14 +68,8 @@ export function AppShell({
   return (
     <div className="min-h-screen bg-[radial-gradient(circle_at_top_left,var(--surface-glow),transparent_36rem)]">
       <aside className="fixed inset-y-0 left-0 z-30 hidden w-64 border-r bg-background/92 px-4 py-5 backdrop-blur-xl lg:flex lg:flex-col">
-        <Link href="/" className="mb-8 flex items-center gap-3 px-2">
-          <span className="grid size-10 place-items-center rounded-2xl bg-primary text-primary-foreground shadow-sm">
-            <HeartHandshake className="size-5" />
-          </span>
-          <span>
-            <span className="block text-base font-semibold tracking-tight">Family Daybook</span>
-            <span className="block text-xs text-muted-foreground">Factual family records</span>
-          </span>
+        <Link href="/" aria-label="Family Daybook home" className="mb-8 px-2 py-1">
+          <BrandLogo decorative className="w-[208px]" />
         </Link>
         <Navigation role={member.role} />
         <div className="mt-auto rounded-2xl border bg-card p-3">
@@ -98,11 +92,8 @@ export function AppShell({
       <div className="lg:pl-64">
         <header className="sticky top-0 z-20 border-b bg-background/88 backdrop-blur-xl lg:hidden">
           <div className="flex h-16 items-center justify-between px-4">
-            <Link href="/" className="flex items-center gap-2 font-semibold">
-              <span className="grid size-9 place-items-center rounded-xl bg-primary text-primary-foreground">
-                <HeartHandshake className="size-4" />
-              </span>
-              Family Daybook
+            <Link href="/" aria-label="Family Daybook home">
+              <BrandLogo decorative className="w-[164px]" />
             </Link>
             <Sheet>
               <SheetTrigger render={<Button variant="outline" size="icon" aria-label="Open navigation" />}>

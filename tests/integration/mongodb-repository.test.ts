@@ -6,7 +6,6 @@ describe.skipIf(!configured)("MongoDB repository integration", () => {
   beforeAll(() => {
     process.env.MONGODB_URI = process.env.TEST_MONGODB_URI;
     process.env.MONGODB_DB = `parenting_log_test_${Date.now()}`;
-    process.env.APP_OWNER_EMAIL = "mongo-owner@example.test";
   });
 
   afterAll(async () => {
@@ -37,5 +36,22 @@ describe.skipIf(!configured)("MongoDB repository integration", () => {
     const bundle = await repository.getRecordBundle(context, "care_entry", entry.id);
     expect(bundle?.revisions).toHaveLength(1);
     expect(bundle?.revisions[0].hash).toHaveLength(64);
+
+    const secondContext = await repository.resolveContext({
+      authUserId: "mongo-owner-two",
+      email: "mongo-owner-two@example.test",
+      displayName: "Second Mongo Owner",
+      mfaEnabled: true,
+      demo: false,
+    });
+    expect(secondContext.workspace.id).not.toBe(context.workspace.id);
+    expect(secondContext.member.id).not.toBe(context.member.id);
+    expect(
+      await repository.getRecordBundle(secondContext, "care_entry", entry.id),
+    ).toBeNull();
+    expect((await repository.getTimeline(secondContext)).items).toHaveLength(0);
+
+    const resolvedAgain = await repository.resolveContext(context.identity);
+    expect(resolvedAgain.workspace.id).toBe(context.workspace.id);
   });
 });

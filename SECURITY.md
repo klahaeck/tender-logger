@@ -4,7 +4,7 @@ Family Daybook contains highly sensitive information about children and family p
 
 ## Required production controls
 
-- Keep Clerk registration invitation-only and require MFA for the owner and every reviewer.
+- Control Clerk registration deliberately. Keep it invitation-only unless self-service owner workspaces are intended, and require MFA for every owner and reviewer.
 - Use separate production and non-production Clerk, Atlas, Blob, and Vercel projects.
 - Give the Atlas application user access only to the Family Daybook database.
 - Require MFA for Atlas, Clerk, Vercel, and source-control administrator accounts.
@@ -16,6 +16,7 @@ Family Daybook contains highly sensitive information about children and family p
 ## Application boundaries
 
 - Every repository call, Server Action, read route, file route, and report route re-checks workspace membership and role.
+- Every new owner account receives a separate workspace; authenticated mode fails closed when MongoDB is unavailable instead of sharing in-memory demo state.
 - Attorney reviewers have read-only access and see caregiving records only after the corresponding day is finalized.
 - Attachments are served through authenticated application routes with private, no-store caching and `nosniff` headers.
 - HTML, SVG, executable files, audio, and video are rejected.

@@ -69,26 +69,52 @@ export class MongoParentingRepository implements ParentingRepository {
   async resolveContext(identity: Identity): Promise<RequestContext> {
     await this.ensureReady();
     const members = await col<Member>("members");
+    const normalizedEmail = identity.email.toLowerCase();
     let member = await members.findOne({
+      authUserId: identity.authUserId,
       status: { $ne: "revoked" },
-      $or: [
-        { authUserId: identity.authUserId },
-        { email: identity.email.toLowerCase() },
-      ],
     });
 
-    if (!member && identity.email.toLowerCase() === process.env.APP_OWNER_EMAIL?.toLowerCase()) {
-      await this.bootstrap(identity);
-      member = await members.findOne({ authUserId: identity.authUserId });
+    if (!member) {
+      member = await members.findOne({
+        email: normalizedEmail,
+        status: { $ne: "revoked" },
+        authUserId: { $exists: false },
+      });
+    }
+
+    if (!member) {
+      try {
+        await this.bootstrap(identity);
+      } catch (error) {
+        member = await members.findOne({
+          authUserId: identity.authUserId,
+          status: { $ne: "revoked" },
+        });
+        if (!member) throw error;
+      }
+      member = await members.findOne({
+        authUserId: identity.authUserId,
+        status: { $ne: "revoked" },
+      });
     }
 
     if (!member) throw new Error("FORBIDDEN");
 
     if (member.status === "invited" || !member.authUserId) {
-      await members.updateOne(
-        { id: member.id },
+      const result = await members.updateOne(
+        {
+          id: member.id,
+          workspaceId: member.workspaceId,
+          status: { $ne: "revoked" },
+          $or: [
+            { authUserId: identity.authUserId },
+            { authUserId: { $exists: false } },
+          ],
+        },
         { $set: { status: "active", authUserId: identity.authUserId } },
       );
+      if (!result.matchedCount) throw new Error("FORBIDDEN");
       member = { ...member, status: "active", authUserId: identity.authUserId };
     }
 
@@ -271,10 +297,16 @@ export class MongoParentingRepository implements ParentingRepository {
         this.getAppointments(context),
         this.getIncidents(context),
         (await col<RecordRevision>("recordRevisions"))
-          .find({ id: { $in: snapshot.recordRevisionIds } })
+          .find({
+            workspaceId: context.workspace.id,
+            id: { $in: snapshot.recordRevisionIds },
+          })
           .toArray(),
         (await col<Attachment>("attachments"))
-          .find({ id: { $in: snapshot.attachmentIds } })
+          .find({
+            workspaceId: context.workspace.id,
+            id: { $in: snapshot.attachmentIds },
+          })
           .toArray(),
       ]);
     const includesChild = (ids: string[]) =>
@@ -690,9 +722,18 @@ export class MongoParentingRepository implements ParentingRepository {
       input.recordType === "care_entry" ? "careEntries" : input.recordType === "appointment" ? "appointments" : "incidents";
     await this.transaction(async (session) => {
       await (await col<Record<string, unknown>>(collectionName)).deleteOne({ id: input.recordId, workspaceId: context.workspace.id }, { session });
-      await (await col<RecordRevision>("recordRevisions")).deleteMany({ id: { $in: revisionIds } }, { session });
+      await (await col<RecordRevision>("recordRevisions")).deleteMany(
+        { workspaceId: context.workspace.id, id: { $in: revisionIds } },
+        { session },
+      );
       await (await col<Attachment>("attachments")).deleteMany({ recordId: input.recordId, workspaceId: context.workspace.id }, { session });
-      await reportCollection.deleteMany({ id: { $in: affectedReports.map((report) => report.id) } }, { session });
+      await reportCollection.deleteMany(
+        {
+          workspaceId: context.workspace.id,
+          id: { $in: affectedReports.map((report) => report.id) },
+        },
+        { session },
+      );
       await (await col<PurgeTombstone>("purgeTombstones")).insertOne(tombstone, { session });
       await this.insertAudit(context, "purged", input.recordType, input.recordId, session, {
         revisionCount: revisionIds.length,
@@ -740,11 +781,7 @@ export class MongoParentingRepository implements ParentingRepository {
   }
 
   private async bootstrap(identity: Identity) {
-    const state = createSeedState(false);
-    state.workspace.demo = false;
-    state.members[0].authUserId = identity.authUserId;
-    state.members[0].email = identity.email.toLowerCase();
-    state.members[0].displayName = identity.displayName;
+    const state = createSeedState(false, identity);
     const client = await getMongoClient();
     await client.withSession(async (session) => {
       await session.withTransaction(async () => {
