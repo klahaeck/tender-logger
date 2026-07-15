@@ -10,5 +10,6 @@ export default async function SettingsPage() {
   const context = await getRequestContext();
   if (context.member.role !== "owner") notFound();
   const data = await repository.getSettings(context);
-  return <AppShell workspace={context.workspace} member={context.member}><PageHeading eyebrow="Owner only" title="Workspace settings" description="Configure family labels, reviewer access, timezone, and irreversible deletion policy." /><SettingsView data={data} /></AppShell>;
+  const timezones = [...new Set(["UTC", data.workspace.timezone, ...Intl.supportedValuesOf("timeZone")])].sort();
+  return <AppShell workspace={context.workspace} member={context.member}><PageHeading eyebrow="Owner only" title="Workspace settings" description="Configure family labels, reviewer access, timezone, and irreversible deletion policy." /><SettingsView data={data} timezones={timezones} /></AppShell>;
 }

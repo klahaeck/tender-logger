@@ -89,17 +89,10 @@ export function createSeedState(demo = true): ParentingState {
       id: "child_one",
       workspaceId: workspace.id,
       displayName: "Child One",
+      birthdate: demo ? "2018-01-01" : localDate,
       color: "sage",
       active: true,
       sortOrder: 1,
-    },
-    {
-      id: "child_two",
-      workspaceId: workspace.id,
-      displayName: "Child Two",
-      color: "blue",
-      active: true,
-      sortOrder: 2,
     },
   ];
 
@@ -132,7 +125,7 @@ export function createSeedState(demo = true): ParentingState {
       id: `routine_${task.key}`,
       taskKey: task.key,
       label: task.label,
-      childIds: task.key === "naptime" ? [children[1].id] : children.map((child) => child.id),
+      childIds: children.map((child) => child.id),
       weekdays: task.key.includes("school") ? [1, 2, 3, 4, 5] : [0, 1, 2, 3, 4, 5, 6],
       suggestedTime: task.suggestedTime,
       sortOrder: index + 1,

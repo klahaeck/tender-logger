@@ -18,19 +18,23 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { toDateTimeLocal } from "@/lib/domain/dates";
+import { localDateTimeToUtc, toDateTimeLocalInTimezone } from "@/lib/domain/dates";
 import type { Caregiver, Child, TodayTask } from "@/lib/domain/types";
 import { AttachmentPicker, FieldError, MultiCheck, uploadFiles } from "./form-parts";
 
 export function CareEntryDialog({
   task,
   date,
+  today,
+  timezone,
   childOptions,
   caregivers,
   trigger,
 }: {
   task?: TodayTask;
   date: string;
+  today: string;
+  timezone: string;
   childOptions: Child[];
   caregivers: Caregiver[];
   trigger?: React.ReactElement;
@@ -45,9 +49,9 @@ export function CareEntryDialog({
 
   const defaultTime = useMemo(() => {
     const now = new Date();
-    if (date === now.toISOString().slice(0, 10)) return toDateTimeLocal(now);
+    if (date === today) return toDateTimeLocalInTimezone(now, timezone);
     return `${date}T${task?.suggestedTime ?? "12:00"}`;
-  }, [date, task?.suggestedTime]);
+  }, [date, task?.suggestedTime, timezone, today]);
 
   const mutation = useMutation({
     mutationFn: async (formData: FormData) => {
@@ -61,7 +65,7 @@ export function CareEntryDialog({
         childIds: selectedChildren,
         caregiverIds: selectedCaregivers,
         status,
-        occurredAt: new Date(formData.get("occurredAt")!.toString()).toISOString(),
+        occurredAt: localDateTimeToUtc(formData.get("occurredAt")!.toString(), timezone),
         durationMinutes:
           formData.get("durationMinutes")?.toString()
             ? Number(formData.get("durationMinutes"))

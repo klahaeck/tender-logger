@@ -1,12 +1,12 @@
 # Security and privacy notes
 
-Tenderlog contains highly sensitive information about children and family proceedings. Treat production setup as security-sensitive.
+Family Daybook contains highly sensitive information about children and family proceedings. Treat production setup as security-sensitive.
 
 ## Required production controls
 
 - Keep Clerk registration invitation-only and require MFA for the owner and every reviewer.
 - Use separate production and non-production Clerk, Atlas, Blob, and Vercel projects.
-- Give the Atlas application user access only to the Tenderlog database.
+- Give the Atlas application user access only to the Family Daybook database.
 - Require MFA for Atlas, Clerk, Vercel, and source-control administrator accounts.
 - Keep Atlas encryption in transit and at rest enabled, configure managed backups, and test restoration.
 - Store no credentials in the repository. Rotate credentials after suspected exposure.

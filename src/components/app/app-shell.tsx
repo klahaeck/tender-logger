@@ -73,7 +73,7 @@ export function AppShell({
             <HeartHandshake className="size-5" />
           </span>
           <span>
-            <span className="block text-base font-semibold tracking-tight">Tenderlog</span>
+            <span className="block text-base font-semibold tracking-tight">Family Daybook</span>
             <span className="block text-xs text-muted-foreground">Factual family records</span>
           </span>
         </Link>
@@ -102,7 +102,7 @@ export function AppShell({
               <span className="grid size-9 place-items-center rounded-xl bg-primary text-primary-foreground">
                 <HeartHandshake className="size-4" />
               </span>
-              Tenderlog
+              Family Daybook
             </Link>
             <Sheet>
               <SheetTrigger render={<Button variant="outline" size="icon" aria-label="Open navigation" />}>

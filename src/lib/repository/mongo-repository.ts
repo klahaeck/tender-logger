@@ -33,7 +33,13 @@ import type {
 } from "@/lib/domain/schemas";
 import type { Identity } from "@/lib/auth/identity";
 import { createSeedState } from "./seed";
-import { recordPayload, requireOwner, toTimelineItems } from "./helpers";
+import {
+  createNextRoutineItems,
+  recordPayload,
+  requireOwner,
+  toTimelineItems,
+} from "./helpers";
+import { toPlainData } from "./to-plain-data";
 import type {
   ParentingRepository,
   RecordBundle,
@@ -90,7 +96,7 @@ export class MongoParentingRepository implements ParentingRepository {
       id: member.workspaceId,
     });
     if (!workspace) throw new Error("WORKSPACE_NOT_FOUND");
-    return { identity, workspace, member };
+    return toPlainData({ identity, workspace, member });
   }
 
   async getDashboard(context: RequestContext, date: string) {
@@ -128,7 +134,7 @@ export class MongoParentingRepository implements ParentingRepository {
     const completed = tasks.filter(
       (task) => task.entry?.status === "completed" || task.entry?.status === "not_applicable",
     ).length;
-    return {
+    return toPlainData({
       workspace: context.workspace,
       member: context.member,
       date,
@@ -142,7 +148,7 @@ export class MongoParentingRepository implements ParentingRepository {
         percent: tasks.length ? Math.round((completed / tasks.length) * 100) : 0,
       },
       recentEntries: dayEntries,
-    };
+    });
   }
 
   async getTimeline(context: RequestContext) {
@@ -169,41 +175,47 @@ export class MongoParentingRepository implements ParentingRepository {
       ...appointments.map((appointment) => appointment.id),
       ...incidents.map((incident) => incident.id),
     ]);
-    return {
+    return toPlainData({
       workspace: context.workspace,
       children,
       caregivers,
       items: toTimelineItems({ entries, appointments, incidents }),
       attachments: attachments.filter((attachment) => visibleRecordIds.has(attachment.recordId)),
       revisions: revisions.filter((revision) => visibleRecordIds.has(revision.recordId)),
-    };
+    });
   }
 
   async getAppointments(context: RequestContext) {
-    return (await col<Appointment>("appointments"))
-      .find({ workspaceId: context.workspace.id })
-      .sort({ scheduledAt: -1 })
-      .toArray();
+    return toPlainData(
+      await (await col<Appointment>("appointments"))
+        .find({ workspaceId: context.workspace.id })
+        .sort({ scheduledAt: -1 })
+        .toArray(),
+    );
   }
 
   async getIncidents(context: RequestContext) {
-    return (await col<Incident>("incidents"))
-      .find({ workspaceId: context.workspace.id })
-      .sort({ occurredAt: -1 })
-      .toArray();
+    return toPlainData(
+      await (await col<Incident>("incidents"))
+        .find({ workspaceId: context.workspace.id })
+        .sort({ occurredAt: -1 })
+        .toArray(),
+    );
   }
 
   async getReports(context: RequestContext) {
-    return (await col<ReportSnapshot>("reportSnapshots"))
-      .find({ workspaceId: context.workspace.id })
-      .sort({ createdAt: -1 })
-      .toArray();
+    return toPlainData(
+      await (await col<ReportSnapshot>("reportSnapshots"))
+        .find({ workspaceId: context.workspace.id })
+        .sort({ createdAt: -1 })
+        .toArray(),
+    );
   }
 
   async getSettings(context: RequestContext): Promise<SettingsData> {
     const [members, children, caregivers, template] = await Promise.all([
       (await col<Member>("members")).find({ workspaceId: context.workspace.id }).toArray(),
-      (await col<Child>("children")).find({ workspaceId: context.workspace.id }).sort({ sortOrder: 1 }).toArray(),
+      (await col<Child>("children")).find({ workspaceId: context.workspace.id, active: true }).sort({ sortOrder: 1 }).toArray(),
       (await col<Caregiver>("caregivers")).find({ workspaceId: context.workspace.id }).toArray(),
       (await col<RoutineTemplate>("routineTemplates")).findOne(
         { workspaceId: context.workspace.id },
@@ -211,7 +223,7 @@ export class MongoParentingRepository implements ParentingRepository {
       ),
     ]);
     if (!template) throw new Error("ROUTINE_TEMPLATE_NOT_FOUND");
-    return { workspace: context.workspace, members, children, caregivers, template };
+    return toPlainData({ workspace: context.workspace, members, children, caregivers, template });
   }
 
   async getRecordBundle(
@@ -238,7 +250,7 @@ export class MongoParentingRepository implements ParentingRepository {
         .find({ workspaceId: context.workspace.id, recordType, recordId })
         .toArray(),
     ]);
-    return { record, revisions, attachments };
+    return toPlainData({ record, revisions, attachments });
   }
 
   async getReportSource(
@@ -250,9 +262,13 @@ export class MongoParentingRepository implements ParentingRepository {
       workspaceId: context.workspace.id,
     });
     if (!snapshot) return null;
-    const [settings, entries, appointments, incidents, revisions, attachments] =
+    const [settings, children, entries, appointments, incidents, revisions, attachments] =
       await Promise.all([
         this.getSettings(context),
+        (await col<Child>("children"))
+          .find({ workspaceId: context.workspace.id })
+          .sort({ sortOrder: 1 })
+          .toArray(),
         (await col<CareEntry>("careEntries"))
           .find({ workspaceId: context.workspace.id })
           .toArray(),
@@ -268,10 +284,10 @@ export class MongoParentingRepository implements ParentingRepository {
     const includesChild = (ids: string[]) =>
       snapshot.filters.childIds.length === 0 ||
       ids.some((childId) => snapshot.filters.childIds.includes(childId));
-    return {
+    return toPlainData({
       snapshot,
       workspace: context.workspace,
-      children: settings.children,
+      children,
       caregivers: settings.caregivers,
       entries: snapshot.filters.includeCare
         ? entries.filter((item) => withinReport(snapshot, item.occurredAt) && includesChild(item.childIds))
@@ -284,7 +300,7 @@ export class MongoParentingRepository implements ParentingRepository {
         : [],
       revisions,
       attachments,
-    };
+    });
   }
 
   async createCareEntry(context: RequestContext, input: CareEntryInput) {
@@ -317,14 +333,16 @@ export class MongoParentingRepository implements ParentingRepository {
       notes: input.notes,
       currentRevisionId: revision.id,
       createdBy: context.member.id,
-      lateEntry: lateEntryFor(input.occurredAt, recordedAt),
+      lateEntry:
+        lateEntryFor(input.occurredAt, recordedAt) ||
+        input.localDate < localDateInTimezone(new Date(recordedAt), context.workspace.timezone),
     };
     await this.transaction(async (session) => {
       await (await col<CareEntry>("careEntries")).insertOne(entry, { session });
       await (await col<RecordRevision>("recordRevisions")).insertOne(revision, { session });
       await this.insertAudit(context, "created", "care_entry", entry.id, session);
     });
-    return entry;
+    return toPlainData(entry);
   }
 
   async createAppointment(context: RequestContext, input: AppointmentInput) {
@@ -347,7 +365,7 @@ export class MongoParentingRepository implements ParentingRepository {
       await (await col<RecordRevision>("recordRevisions")).insertOne(revision, { session });
       await this.insertAudit(context, "created", "appointment", recordId, session);
     });
-    return appointment;
+    return toPlainData(appointment);
   }
 
   async createIncident(context: RequestContext, input: IncidentInput) {
@@ -370,7 +388,7 @@ export class MongoParentingRepository implements ParentingRepository {
       await (await col<RecordRevision>("recordRevisions")).insertOne(revision, { session });
       await this.insertAudit(context, "created", "incident", recordId, session);
     });
-    return incident;
+    return toPlainData(incident);
   }
 
   async correctRecord(context: RequestContext, input: CorrectionInput) {
@@ -415,14 +433,14 @@ export class MongoParentingRepository implements ParentingRepository {
         revisionNumber: revision.revisionNumber,
       });
     });
-    return revision;
+    return toPlainData(revision);
   }
 
   async finalizeDailyLog(context: RequestContext, localDate: string) {
     requireOwner(context.member.role);
     const template = await this.templateForDate(context, localDate);
     const log = await this.ensureDailyLog(context, localDate, template.version);
-    if (log.status === "finalized") return log;
+    if (log.status === "finalized") return toPlainData(log);
     const finalizedAt = new Date().toISOString();
     await this.transaction(async (session) => {
       await (await col<DailyLog>("dailyLogs")).updateOne(
@@ -432,12 +450,12 @@ export class MongoParentingRepository implements ParentingRepository {
       );
       await this.insertAudit(context, "finalized", "daily_log", log.id, session);
     });
-    return {
+    return toPlainData({
       ...log,
       status: "finalized" as const,
       finalizedAt,
       finalizedBy: context.member.id,
-    };
+    });
   }
 
   async createReport(context: RequestContext, input: ReportInput) {
@@ -487,7 +505,7 @@ export class MongoParentingRepository implements ParentingRepository {
       attachmentIds: attachments.map((item) => item.id),
     };
     await (await col<ReportSnapshot>("reportSnapshots")).insertOne(report);
-    return report;
+    return toPlainData(report);
   }
 
   async markReportReady(
@@ -520,39 +538,83 @@ export class MongoParentingRepository implements ParentingRepository {
         { $set: { name: input.name, timezone: input.timezone, hardDeleteEnabled: input.hardDeleteEnabled, updatedAt: new Date().toISOString() } },
         { session },
       );
-      for (const child of input.children) {
-        await (await col<Child>("children")).updateOne(
+      const children = await col<Child>("children");
+      const activeChildIds = input.children.map((child) => child.id);
+      await children.updateMany(
+        { workspaceId: context.workspace.id, id: { $nin: activeChildIds } },
+        { $set: { active: false } },
+        { session },
+      );
+      const childColors = ["sage", "blue", "amber", "violet"] as const;
+      for (const [index, child] of input.children.entries()) {
+        await children.updateOne(
           { id: child.id, workspaceId: context.workspace.id },
-          { $set: { displayName: child.displayName } },
-          { session },
+          {
+            $set: {
+              displayName: child.displayName,
+              birthdate: child.birthdate,
+              active: true,
+              sortOrder: index + 1,
+            },
+            $setOnInsert: {
+              id: child.id,
+              workspaceId: context.workspace.id,
+              color: childColors[index % childColors.length],
+            },
+          },
+          { upsert: true, session },
         );
       }
       for (const caregiver of input.caregivers) {
-        await (await col<Caregiver>("caregivers")).updateOne(
-          { id: caregiver.id, workspaceId: context.workspace.id },
-          { $set: { displayName: caregiver.displayName, relationship: caregiver.relationship } },
-          { session },
-        );
+        const caregivers = await col<Caregiver>("caregivers");
+        if (caregiver.id) {
+          const result = await caregivers.updateOne(
+            { id: caregiver.id, workspaceId: context.workspace.id },
+            { $set: { displayName: caregiver.displayName, relationship: caregiver.relationship } },
+            { session },
+          );
+          if (!result.matchedCount) throw new Error("INVALID_CAREGIVER");
+        } else {
+          await caregivers.insertOne(
+            {
+              id: id("caregiver"),
+              workspaceId: context.workspace.id,
+              displayName: caregiver.displayName,
+              relationship: caregiver.relationship,
+              isOwner: false,
+              active: true,
+            },
+            { session },
+          );
+        }
       }
       const currentTemplate = await (await col<RoutineTemplate>("routineTemplates")).findOne(
         { workspaceId: context.workspace.id },
         { sort: { version: -1 }, session },
       );
       if (currentTemplate) {
-        const nextItems = currentTemplate.items.map((item) => {
-          const update = input.routineItems.find((candidate) => candidate.id === item.id);
-          return update ? { ...item, ...update } : item;
-        });
+        const nextItems = createNextRoutineItems(currentTemplate.items, input.routineItems);
         if (JSON.stringify(nextItems) !== JSON.stringify(currentTemplate.items)) {
+          const effectiveFrom = localDateInTimezone(new Date(), input.timezone);
+          const nextVersion = currentTemplate.version + 1;
           await (await col<RoutineTemplate>("routineTemplates")).insertOne(
             {
               id: id("template"),
               workspaceId: currentTemplate.workspaceId,
-              version: currentTemplate.version + 1,
-              effectiveFrom: localDateInTimezone(new Date(), input.timezone),
+              version: nextVersion,
+              effectiveFrom,
               createdAt: new Date().toISOString(),
               items: nextItems,
             },
+            { session },
+          );
+          await (await col<DailyLog>("dailyLogs")).updateOne(
+            {
+              workspaceId: context.workspace.id,
+              localDate: effectiveFrom,
+              status: "open",
+            },
+            { $set: { templateVersion: nextVersion } },
             { session },
           );
         }
@@ -590,7 +652,7 @@ export class MongoParentingRepository implements ParentingRepository {
       );
       await this.insertAudit(context, "invited", "member", member.id, session);
     });
-    return member;
+    return toPlainData(member);
   }
 
   async revokeReviewer(context: RequestContext, memberId: string) {
@@ -643,7 +705,7 @@ export class MongoParentingRepository implements ParentingRepository {
         reportCount: affectedReports.length,
       });
     });
-    return tombstone;
+    return toPlainData(tombstone);
   }
 
   async addAttachment(context: RequestContext, attachment: Attachment) {
@@ -673,7 +735,7 @@ export class MongoParentingRepository implements ParentingRepository {
       });
       if (!log) return null;
     }
-    return attachment;
+    return toPlainData(attachment);
   }
 
   async recordAuditEvent(

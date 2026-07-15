@@ -111,37 +111,65 @@ export const inviteSchema = z.object({
   displayName: z.string().trim().min(2).max(100),
 });
 
-export const workspaceSettingsSchema = z.object({
-  name: z.string().trim().min(2).max(120),
-  timezone: z.string().trim().min(1).max(100),
-  hardDeleteEnabled: z.boolean(),
-  children: z
-    .array(
+export const workspaceSettingsSchema = z
+  .object({
+    name: z.string().trim().min(2).max(120),
+    timezone: z.string().trim().min(1).max(100),
+    hardDeleteEnabled: z.boolean(),
+    children: z
+      .array(
+        z.object({
+          id: z.string().regex(/^child_[A-Za-z0-9-]+$/),
+          displayName: z.string().trim().min(1).max(80),
+          birthdate: z.string().date(),
+        }),
+      )
+      .min(1, "Add at least one child"),
+    caregivers: z
+      .array(
+        z.object({
+          id: z.string().min(1).optional(),
+          displayName: z.string().trim().min(1).max(80),
+          relationship: z.string().trim().min(1).max(80),
+        }),
+      )
+      .min(1),
+    routineItems: z.array(
       z.object({
-        id: z.string(),
-        displayName: z.string().trim().min(1).max(80),
+        id: z.string().min(1).optional(),
+        label: z.string().trim().min(2).max(100),
+        suggestedTime: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/),
+        childIds: z.array(z.string()),
+        active: z.boolean(),
       }),
-    )
-    .length(2),
-  caregivers: z
-    .array(
-      z.object({
-        id: z.string(),
-        displayName: z.string().trim().min(1).max(80),
-        relationship: z.string().trim().min(1).max(80),
-      }),
-    )
-    .min(1),
-  routineItems: z.array(
-    z.object({
-      id: z.string(),
-      label: z.string().trim().min(2).max(100),
-      suggestedTime: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/),
-      childIds: z.array(z.string()).min(1),
-      active: z.boolean(),
-    }),
-  ),
-});
+    ),
+  })
+  .superRefine((value, context) => {
+    const childIds = new Set(value.children.map((child) => child.id));
+    if (childIds.size !== value.children.length) {
+      context.addIssue({
+        code: "custom",
+        path: ["children"],
+        message: "Each child must be unique",
+      });
+    }
+    value.routineItems.forEach((item, index) => {
+      if (item.active && item.childIds.length === 0) {
+        context.addIssue({
+          code: "custom",
+          path: ["routineItems", index, "childIds"],
+          message: "Choose at least one child for each active routine",
+        });
+      }
+      if (item.childIds.some((childId) => !childIds.has(childId))) {
+        context.addIssue({
+          code: "custom",
+          path: ["routineItems", index, "childIds"],
+          message: "Routine children must belong to this workspace",
+        });
+      }
+    });
+  });
 
 export const purgeSchema = z.object({
   recordType: z.enum(["care_entry", "appointment", "incident"]),

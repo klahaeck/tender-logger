@@ -2,11 +2,41 @@ import type {
   Appointment,
   CareEntry,
   Incident,
+  RoutineTemplateItem,
   TimelineItem,
 } from "@/lib/domain/types";
+import type { WorkspaceSettingsInput } from "@/lib/domain/schemas";
+import { id } from "@/lib/domain/integrity";
 
 export function requireOwner(role: string): void {
   if (role !== "owner") throw new Error("FORBIDDEN");
+}
+
+export function createNextRoutineItems(
+  currentItems: RoutineTemplateItem[],
+  inputItems: WorkspaceSettingsInput["routineItems"],
+): RoutineTemplateItem[] {
+  const currentById = new Map(currentItems.map((item) => [item.id, item]));
+  const submittedIds = new Set<string>();
+
+  return inputItems.map((input, index) => {
+    const current = input.id ? currentById.get(input.id) : undefined;
+    if (input.id && (!current || submittedIds.has(input.id))) {
+      throw new Error("INVALID_ROUTINE_ITEM");
+    }
+    if (input.id) submittedIds.add(input.id);
+
+    return {
+      id: current?.id ?? id("routine"),
+      taskKey: current?.taskKey ?? "custom",
+      label: input.label,
+      childIds: input.childIds,
+      weekdays: current?.weekdays ?? [0, 1, 2, 3, 4, 5, 6],
+      suggestedTime: input.suggestedTime,
+      sortOrder: index + 1,
+      active: input.active,
+    };
+  });
 }
 
 export function toTimelineItems(input: {

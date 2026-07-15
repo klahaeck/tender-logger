@@ -29,7 +29,12 @@ import type {
   WorkspaceSettingsInput,
 } from "@/lib/domain/schemas";
 import { createSeedState, type ParentingState } from "./seed";
-import { recordPayload, requireOwner, toTimelineItems } from "./helpers";
+import {
+  createNextRoutineItems,
+  recordPayload,
+  requireOwner,
+  toTimelineItems,
+} from "./helpers";
 import type {
   ParentingRepository,
   RecordBundle,
@@ -154,7 +159,7 @@ export class MemoryParentingRepository implements ParentingRepository {
     ]);
     return {
       workspace: context.workspace,
-      children: data.children.filter((child) => child.active),
+      children: data.children,
       caregivers: data.caregivers.filter((caregiver) => caregiver.active),
       items: toTimelineItems({
         entries: visibleEntries,
@@ -195,7 +200,7 @@ export class MemoryParentingRepository implements ParentingRepository {
     return {
       workspace: context.workspace,
       members: data.members,
-      children: data.children,
+      children: data.children.filter((child) => child.active),
       caregivers: data.caregivers,
       template: latestTemplate(data),
     };
@@ -310,7 +315,9 @@ export class MemoryParentingRepository implements ParentingRepository {
       notes: input.notes,
       currentRevisionId: revision.id,
       createdBy: context.member.id,
-      lateEntry: lateEntryFor(input.occurredAt, recordedAt),
+      lateEntry:
+        lateEntryFor(input.occurredAt, recordedAt) ||
+        input.localDate < localDateInTimezone(new Date(recordedAt), context.workspace.timezone),
     };
     data.careEntries.push(entry);
     await this.audit(context, "created", "care_entry", entry.id);
@@ -522,34 +529,69 @@ export class MemoryParentingRepository implements ParentingRepository {
     data.workspace.timezone = input.timezone;
     data.workspace.hardDeleteEnabled = input.hardDeleteEnabled;
     data.workspace.updatedAt = new Date().toISOString();
-    for (const childInput of input.children) {
+    const activeChildIds = new Set(input.children.map((child) => child.id));
+    for (const child of data.children) {
+      if (!activeChildIds.has(child.id)) child.active = false;
+    }
+    const childColors = ["sage", "blue", "amber", "violet"] as const;
+    for (const [index, childInput] of input.children.entries()) {
       const child = data.children.find((item) => item.id === childInput.id);
-      if (child) child.displayName = childInput.displayName;
+      if (child) {
+        child.displayName = childInput.displayName;
+        child.birthdate = childInput.birthdate;
+        child.active = true;
+        child.sortOrder = index + 1;
+      } else {
+        data.children.push({
+          id: childInput.id,
+          workspaceId: data.workspace.id,
+          displayName: childInput.displayName,
+          birthdate: childInput.birthdate,
+          color: childColors[index % childColors.length],
+          active: true,
+          sortOrder: index + 1,
+        });
+      }
     }
     for (const caregiverInput of input.caregivers) {
-      const caregiver = data.caregivers.find(
-        (item) => item.id === caregiverInput.id,
-      );
-      if (caregiver) {
+      if (caregiverInput.id) {
+        const caregiver = data.caregivers.find(
+          (item) =>
+            item.id === caregiverInput.id &&
+            item.workspaceId === context.workspace.id,
+        );
+        if (!caregiver) throw new Error("INVALID_CAREGIVER");
         caregiver.displayName = caregiverInput.displayName;
         caregiver.relationship = caregiverInput.relationship;
+      } else {
+        data.caregivers.push({
+          id: id("caregiver"),
+          workspaceId: context.workspace.id,
+          displayName: caregiverInput.displayName,
+          relationship: caregiverInput.relationship,
+          isOwner: false,
+          active: true,
+        });
       }
     }
     const currentTemplate = latestTemplate(data);
-    const nextItems = currentTemplate.items.map((item) => {
-      const update = input.routineItems.find((candidate) => candidate.id === item.id);
-      return update ? { ...item, ...update } : item;
-    });
+    const nextItems = createNextRoutineItems(currentTemplate.items, input.routineItems);
     const templateChanged = JSON.stringify(nextItems) !== JSON.stringify(currentTemplate.items);
     if (templateChanged) {
-      data.templates.push({
+      const effectiveFrom = localDateInTimezone(new Date(), data.workspace.timezone);
+      const nextTemplate = {
         ...currentTemplate,
         id: id("template"),
         version: currentTemplate.version + 1,
-        effectiveFrom: localDateInTimezone(new Date(), data.workspace.timezone),
+        effectiveFrom,
         createdAt: new Date().toISOString(),
         items: nextItems,
-      });
+      };
+      data.templates.push(nextTemplate);
+      const todayLog = data.dailyLogs.find(
+        (log) => log.localDate === effectiveFrom && log.status === "open",
+      );
+      if (todayLog) todayLog.templateVersion = nextTemplate.version;
     }
     await this.audit(context, "settings_changed", "workspace", data.workspace.id);
     context.workspace = data.workspace;

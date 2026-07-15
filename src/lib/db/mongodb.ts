@@ -36,7 +36,7 @@ export async function getMongoClient(): Promise<MongoClient> {
 
 export async function getDatabase() {
   const client = await getMongoClient();
-  return client.db(process.env.MONGODB_DB ?? "parenting_log");
+  return client.db(process.env.MONGODB_DB ?? "dev");
 }
 
 export async function collection<T extends Document>(

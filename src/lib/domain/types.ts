@@ -71,6 +71,7 @@ export interface Child {
   id: string;
   workspaceId: string;
   displayName: string;
+  birthdate: string;
   color: "sage" | "blue" | "amber" | "violet";
   active: boolean;
   sortOrder: number;

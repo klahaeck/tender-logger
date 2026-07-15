@@ -1,15 +1,18 @@
 "use client";
 
+import { useTransition } from "react";
+import { useRouter } from "next/navigation";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { CheckCircle2, ChevronRight, Clock3, LockKeyhole, Users } from "lucide-react";
+import { CheckCircle2, ChevronLeft, ChevronRight, Clock3, LockKeyhole, Users } from "lucide-react";
 
 import { finalizeDailyLogAction } from "@/app/actions";
 import { CareEntryDialog } from "@/components/forms/care-entry-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
 import { Progress } from "@/components/ui/progress";
-import { formatDay, formatTime } from "@/lib/domain/dates";
+import { formatDay, formatTime, isValidLocalDate, shiftLocalDate } from "@/lib/domain/dates";
 import { fetchDashboard } from "@/lib/fetchers";
 import type { DashboardData } from "@/lib/domain/types";
 
@@ -17,24 +20,86 @@ function childNames(ids: string[], data: DashboardData) {
   return ids.map((id) => data.children.find((child) => child.id === id)?.displayName).filter(Boolean).join(" + ");
 }
 
-export function TodayDashboard({ date, initialData }: { date: string; initialData: DashboardData }) {
+export function TodayDashboard({ date, today, initialData }: { date: string; today: string; initialData: DashboardData }) {
+  const router = useRouter();
+  const [isNavigating, startNavigation] = useTransition();
   const queryClient = useQueryClient();
   const { data } = useQuery({ queryKey: ["dashboard", date], queryFn: () => fetchDashboard(date), initialData });
   const finalize = useMutation({
     mutationFn: () => finalizeDailyLogAction(date),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["dashboard", date] }),
   });
+  const historical = date < today;
+  const navigateToDate = (nextDate: string) => {
+    if (!isValidLocalDate(nextDate) || nextDate > today) return;
+    startNavigation(() => {
+      router.push(nextDate === today ? "/" : `/?date=${encodeURIComponent(nextDate)}`, { scroll: false });
+    });
+  };
 
   return (
     <div className="space-y-7">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <p className="mb-2 text-xs font-semibold uppercase tracking-[0.16em] text-primary">Daily care log</p>
+          <div className="mb-2 flex flex-wrap items-center gap-2">
+            <p className="text-xs font-semibold uppercase tracking-[0.16em] text-primary">Daily care log</p>
+            {historical && <Badge variant="outline">Historical day</Badge>}
+          </div>
           <h1 className="text-3xl font-semibold tracking-tight sm:text-4xl">{formatDay(date)}</h1>
-          <p className="mt-2 text-sm text-muted-foreground">A clear, factual view of today’s care for both children.</p>
+          <p className="mt-2 text-sm text-muted-foreground">A clear, factual view of {historical ? "care on this day" : "today’s care"} for your children.</p>
         </div>
-        <CareEntryDialog date={date} childOptions={data.children} caregivers={data.caregivers} />
+        <CareEntryDialog date={date} today={today} timezone={data.workspace.timezone} childOptions={data.children} caregivers={data.caregivers} />
       </div>
+
+      <div className="flex flex-col gap-3 rounded-2xl border bg-card p-3 shadow-sm sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex items-center gap-2" role="group" aria-label="Choose log date">
+          <Button
+            type="button"
+            variant="outline"
+            size="icon"
+            aria-label="Previous day"
+            disabled={isNavigating}
+            onClick={() => navigateToDate(shiftLocalDate(date, -1))}
+          >
+            <ChevronLeft className="size-4" />
+          </Button>
+          <Input
+            type="date"
+            aria-label="Log date"
+            value={date}
+            max={today}
+            disabled={isNavigating}
+            onChange={(event) => navigateToDate(event.target.value)}
+            className="w-full min-w-0 sm:w-44"
+          />
+          <Button
+            type="button"
+            variant="outline"
+            size="icon"
+            aria-label="Next day"
+            disabled={isNavigating || date >= today}
+            onClick={() => navigateToDate(shiftLocalDate(date, 1))}
+          >
+            <ChevronRight className="size-4" />
+          </Button>
+        </div>
+        {historical ? (
+          <Button type="button" variant="ghost" size="sm" disabled={isNavigating} onClick={() => navigateToDate(today)}>
+            Return to today
+          </Button>
+        ) : (
+          <p className="px-1 text-xs text-muted-foreground">Select an earlier date to add a contemporaneously labeled past entry.</p>
+        )}
+      </div>
+
+      {historical && (
+        <div className="flex gap-3 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-amber-950">
+          <Clock3 className="mt-0.5 size-4 shrink-0" />
+          <p className="text-sm leading-6">
+            Records added to this day are labeled as late entries and retain separate occurrence and server-controlled entry times.
+          </p>
+        </div>
+      )}
 
       <div className="grid gap-4 md:grid-cols-[1.4fr_1fr]">
         <Card className="overflow-hidden border-0 bg-primary text-primary-foreground shadow-lg shadow-primary/10">
@@ -100,7 +165,7 @@ export function TodayDashboard({ date, initialData }: { date: string; initialDat
               </button>
             );
             return recorded ? <div key={task.id}>{trigger}</div> : (
-              <CareEntryDialog key={task.id} task={task} date={date} childOptions={data.children} caregivers={data.caregivers} trigger={trigger} />
+              <CareEntryDialog key={task.id} task={task} date={date} today={today} timezone={data.workspace.timezone} childOptions={data.children} caregivers={data.caregivers} trigger={trigger} />
             );
           })}
         </div>

@@ -27,6 +27,23 @@ export const CARE_STATUS_LABELS: Record<CareStatus, string> = {
   not_applicable: "Not applicable",
 };
 
+export const CAREGIVER_RELATIONSHIPS = [
+  "Parent",
+  "Mother",
+  "Father",
+  "Co-parent",
+  "Stepparent",
+  "Legal guardian",
+  "Foster parent",
+  "Grandparent",
+  "Adult sibling",
+  "Aunt or uncle",
+  "Other relative",
+  "Nanny or babysitter",
+  "Family friend",
+  "Other caregiver",
+] as const;
+
 export const INCIDENT_LABELS: Record<IncidentCategory, string> = {
   safety_hazard: "Safety hazard",
   concerning_interaction: "Concerning interaction",

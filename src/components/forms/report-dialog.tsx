@@ -53,7 +53,7 @@ export function ReportDialog({ childOptions, timezone }: { childOptions: Child[]
               <div className="space-y-2"><Label htmlFor="from">From</Label><Input id="from" name="from" type="date" required defaultValue={localDateInTimezone(oneMonthAgo, timezone)} /></div>
               <div className="space-y-2"><Label htmlFor="to">Through</Label><Input id="to" name="to" type="date" required defaultValue={today} /></div>
             </div>
-            <MultiCheck label="Children (leave empty for both)" values={childOptions} selected={childIds} onChange={setChildIds} />
+            <MultiCheck label="Children (leave empty for all)" values={childOptions} selected={childIds} onChange={setChildIds} />
             <fieldset className="space-y-3">
               <legend className="text-sm font-medium">Include</legend>
               {[{ key: "care", label: "Caregiving records" }, { key: "appointments", label: "Appointments" }, { key: "incidents", label: "Factual incidents" }].map((item) => (

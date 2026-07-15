@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { fileTypeFromBuffer } from "file-type";
 
 import { clerkConfigured } from "@/lib/auth/identity";
+import { isValidLocalDate, localDateInTimezone } from "@/lib/domain/dates";
 import { id, sha256 } from "@/lib/domain/integrity";
 import {
   appointmentSchema,
@@ -15,7 +16,7 @@ import {
   reportSchema,
   workspaceSettingsSchema,
 } from "@/lib/domain/schemas";
-import type { ActionResult, Attachment, RecordType } from "@/lib/domain/types";
+import type { ActionResult, Attachment, Caregiver, Child, RecordType, RoutineTemplate } from "@/lib/domain/types";
 import { getRepository, getRequestContext } from "@/lib/repository";
 import { generateEvidencePackage } from "@/lib/reporting/generate-package";
 import { deletePrivateFiles, putPrivateFile } from "@/lib/storage/private-files";
@@ -61,6 +62,13 @@ export async function createCareEntryAction(input: unknown): Promise<ActionResul
   try {
     const repository = await getRepository();
     const context = await getRequestContext();
+    const today = localDateInTimezone(new Date(), context.workspace.timezone);
+    if (parsed.data.localDate > today) {
+      return { ok: false, error: "Care records cannot be added to a future date." };
+    }
+    if (localDateInTimezone(new Date(parsed.data.occurredAt), context.workspace.timezone) !== parsed.data.localDate) {
+      return { ok: false, error: "The occurrence time must fall on the selected log date." };
+    }
     const entry = await repository.createCareEntry(context, parsed.data);
     refreshRecords();
     return { ok: true, data: { id: entry.id } };
@@ -115,6 +123,9 @@ export async function finalizeDailyLogAction(localDate: string): Promise<ActionR
   try {
     const repository = await getRepository();
     const context = await getRequestContext();
+    if (!isValidLocalDate(localDate) || localDate > localDateInTimezone(new Date(), context.workspace.timezone)) {
+      return { ok: false, error: "Choose today or an earlier valid date." };
+    }
     const log = await repository.finalizeDailyLog(context, localDate);
     refreshRecords();
     return { ok: true, data: { finalizedAt: log.finalizedAt } };
@@ -204,15 +215,28 @@ export async function uploadAttachmentAction(formData: FormData): Promise<Action
   }
 }
 
-export async function updateSettingsAction(input: unknown): Promise<ActionResult> {
+export async function updateSettingsAction(
+  input: unknown,
+): Promise<ActionResult<{ template: RoutineTemplate; children: Child[]; caregivers: Caregiver[] }>> {
   const parsed = workspaceSettingsSchema.safeParse(input);
   if (!parsed.success) return validationFailure(parsed.error);
   try {
+    const today = localDateInTimezone(new Date(), parsed.data.timezone);
+    if (parsed.data.children.some((child) => child.birthdate > today)) {
+      return { ok: false, error: "Birthdates cannot be in the future." };
+    }
     const repository = await getRepository();
     const context = await getRequestContext();
-    await repository.updateSettings(context, parsed.data);
+    const settings = await repository.updateSettings(context, parsed.data);
     refreshRecords();
-    return { ok: true };
+    return {
+      ok: true,
+      data: {
+        template: settings.template,
+        children: settings.children,
+        caregivers: settings.caregivers,
+      },
+    };
   } catch (error) {
     return fail(error);
   }

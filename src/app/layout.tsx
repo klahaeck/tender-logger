@@ -16,7 +16,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: { default: "Tenderlog", template: "%s · Tenderlog" },
+  title: { default: "Family Daybook", template: "%s · Family Daybook" },
   description: "Private, factual daily parenting records.",
 };
 

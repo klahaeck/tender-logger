@@ -1,12 +1,13 @@
-# Tenderlog
+# Family Daybook
 
-Tenderlog is a private, mobile-first daily parenting log for factual caregiving records, appointments, incidents, immutable corrections, and attorney-reviewable evidence packages.
+Family Daybook is a private, mobile-first daily parenting log for factual caregiving records, appointments, incidents, immutable corrections, and attorney-reviewable evidence packages.
 
 It is a recordkeeping tool, not legal advice, an emergency service, or a guarantee that any record will be admitted or given a particular weight by a court. Ask local counsel what should be collected, retained, disclosed, or submitted.
 
 ## What is implemented
 
 - Per-child daily routine templates and a fast “Today” checklist
+- Previous-day navigation with historical templates, future-date prevention, and visible late-entry timestamps
 - Caregiver attribution, actual occurrence time, duration, outcomes, and factual notes
 - Scheduled appointments with responsibility and attendance outcomes
 - Neutral incident records for safety hazards and concerning interactions

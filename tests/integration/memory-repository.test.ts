@@ -5,7 +5,7 @@ import type { Identity } from "@/lib/auth/identity";
 import type { Attachment } from "@/lib/domain/types";
 import { generateEvidencePackage } from "@/lib/reporting/generate-package";
 import { getPrivateFile } from "@/lib/storage/private-files";
-import { localDateInTimezone } from "@/lib/domain/dates";
+import { localDateInTimezone, shiftLocalDate } from "@/lib/domain/dates";
 
 const identity: Identity = {
   authUserId: "demo_owner",
@@ -118,21 +118,234 @@ describe("memory repository integration", () => {
     expect((await repository.getTimeline(reviewerContext)).attachments).toHaveLength(1);
   });
 
-  it("keeps historical days bound to their original routine version", async () => {
+  it("starts with one child and persists a dynamic child list with birthdates", async () => {
     const repository = new MemoryParentingRepository();
     const context = await repository.resolveContext(identity);
-    const historicalDate = "2026-07-13";
-    const historical = await repository.getDashboard(context, historicalDate);
-    const originalLabel = historical.tasks[0].label;
     const settings = await repository.getSettings(context);
+    expect(settings.children).toHaveLength(1);
 
-    await repository.updateSettings(context, {
+    const added = await repository.updateSettings(context, {
+      name: settings.workspace.name,
+      timezone: settings.workspace.timezone,
+      hardDeleteEnabled: settings.workspace.hardDeleteEnabled,
+      children: [
+        ...settings.children.map((child) => ({
+          id: child.id,
+          displayName: child.displayName,
+          birthdate: child.birthdate,
+        })),
+        {
+          id: "child_added",
+          displayName: "Child Added",
+          birthdate: "2020-06-30",
+        },
+      ],
+      caregivers: settings.caregivers.map((caregiver) => ({
+        id: caregiver.id,
+        displayName: caregiver.displayName,
+        relationship: caregiver.relationship,
+      })),
+      routineItems: settings.template.items.map((item) => ({
+        id: item.id,
+        label: item.label,
+        suggestedTime: item.suggestedTime,
+        childIds: item.childIds,
+        active: item.active,
+      })),
+    });
+
+    expect(added.children).toHaveLength(2);
+    expect(added.children[1]).toMatchObject({
+      id: "child_added",
+      displayName: "Child Added",
+      birthdate: "2020-06-30",
+      active: true,
+      sortOrder: 2,
+    });
+
+    const removed = await repository.updateSettings(context, {
+      name: added.workspace.name,
+      timezone: added.workspace.timezone,
+      hardDeleteEnabled: added.workspace.hardDeleteEnabled,
+      children: [{ id: "child_added", displayName: "Child Added", birthdate: "2020-06-30" }],
+      caregivers: added.caregivers.map((caregiver) => ({
+        id: caregiver.id,
+        displayName: caregiver.displayName,
+        relationship: caregiver.relationship,
+      })),
+      routineItems: added.template.items.map((item) => ({
+        id: item.id,
+        label: item.label,
+        suggestedTime: item.suggestedTime,
+        childIds: ["child_added"],
+        active: item.active,
+      })),
+    });
+
+    expect(removed.children).toHaveLength(1);
+    expect(removed.children[0].id).toBe("child_added");
+    expect((await repository.getDashboard(context, "2026-07-15")).children).toHaveLength(1);
+  });
+
+  it("starts with two caregivers and persists additional caregivers", async () => {
+    const repository = new MemoryParentingRepository();
+    const context = await repository.resolveContext(identity);
+    const settings = await repository.getSettings(context);
+    expect(settings.caregivers).toHaveLength(2);
+
+    const updated = await repository.updateSettings(context, {
       name: settings.workspace.name,
       timezone: settings.workspace.timezone,
       hardDeleteEnabled: settings.workspace.hardDeleteEnabled,
       children: settings.children.map((child) => ({
         id: child.id,
         displayName: child.displayName,
+        birthdate: child.birthdate,
+      })),
+      caregivers: [
+        ...settings.caregivers.map((caregiver) => ({
+          id: caregiver.id,
+          displayName: caregiver.displayName,
+          relationship: caregiver.relationship,
+        })),
+        { displayName: "Grandparent", relationship: "Grandparent" },
+      ],
+      routineItems: settings.template.items.map((item) => ({
+        id: item.id,
+        label: item.label,
+        suggestedTime: item.suggestedTime,
+        childIds: item.childIds,
+        active: item.active,
+      })),
+    });
+
+    expect(updated.caregivers).toHaveLength(3);
+    expect(updated.caregivers[2]).toMatchObject({
+      displayName: "Grandparent",
+      relationship: "Grandparent",
+      isOwner: false,
+      active: true,
+    });
+    expect(updated.caregivers[2].id).toMatch(/^caregiver_/);
+    expect((await repository.getDashboard(context, "2026-07-15")).caregivers).toHaveLength(3);
+  });
+
+  it("keeps historical days bound to their original routine version", async () => {
+    const repository = new MemoryParentingRepository();
+    const context = await repository.resolveContext(identity);
+    const today = localDateInTimezone(new Date(), context.workspace.timezone);
+    const historicalDate = shiftLocalDate(today, -1);
+    const nextDayDate = shiftLocalDate(today, 1);
+    const historical = await repository.getDashboard(context, historicalDate);
+    const originalToday = await repository.getDashboard(context, today);
+    const originalTodayVersion = originalToday.dailyLog.templateVersion;
+    const originalLabel = historical.tasks[0].label;
+    const settings = await repository.getSettings(context);
+
+    const updatedSettings = await repository.updateSettings(context, {
+      name: settings.workspace.name,
+      timezone: settings.workspace.timezone,
+      hardDeleteEnabled: settings.workspace.hardDeleteEnabled,
+      children: settings.children.map((child) => ({
+        id: child.id,
+        displayName: child.displayName,
+        birthdate: child.birthdate,
+      })),
+      caregivers: settings.caregivers.map((caregiver) => ({
+        id: caregiver.id,
+        displayName: caregiver.displayName,
+        relationship: caregiver.relationship,
+      })),
+      routineItems: [
+        ...settings.template.items.slice(1).map((item, index) => ({
+          id: item.id,
+          label: index === 0 ? "Updated routine label" : item.label,
+          suggestedTime: item.suggestedTime,
+          childIds: item.childIds,
+          active: item.active,
+        })),
+        {
+          label: "Evening walk",
+          suggestedTime: "18:30",
+          childIds: settings.children.map((child) => child.id),
+          active: true,
+        },
+      ],
+    });
+
+    const savedAgain = await repository.updateSettings(context, {
+      name: updatedSettings.workspace.name,
+      timezone: updatedSettings.workspace.timezone,
+      hardDeleteEnabled: updatedSettings.workspace.hardDeleteEnabled,
+      children: updatedSettings.children.map((child) => ({
+        id: child.id,
+        displayName: child.displayName,
+        birthdate: child.birthdate,
+      })),
+      caregivers: updatedSettings.caregivers.map((caregiver) => ({
+        id: caregiver.id,
+        displayName: caregiver.displayName,
+        relationship: caregiver.relationship,
+      })),
+      routineItems: updatedSettings.template.items.map((item) => ({
+        id: item.id,
+        label: item.label,
+        suggestedTime: item.suggestedTime,
+        childIds: item.childIds,
+        active: item.active,
+      })),
+    });
+    expect(savedAgain.template.version).toBe(2);
+
+    const reopenedHistorical = await repository.getDashboard(context, historicalDate);
+    const refreshedToday = await repository.getDashboard(context, today);
+    const nextDay = await repository.getDashboard(context, nextDayDate);
+    expect(reopenedHistorical.tasks[0].label).toBe(originalLabel);
+    expect(refreshedToday.tasks.some((task) => task.id === settings.template.items[0].id)).toBe(false);
+    expect(refreshedToday.tasks.at(-1)?.label).toBe("Evening walk");
+    expect(originalTodayVersion).toBe(1);
+    expect(refreshedToday.dailyLog.templateVersion).toBe(2);
+    expect(nextDay.tasks.some((task) => task.id === settings.template.items[0].id)).toBe(false);
+    expect(nextDay.tasks[0].label).toBe("Updated routine label");
+    expect(nextDay.tasks.at(-1)).toMatchObject({
+      taskKey: "custom",
+      label: "Evening walk",
+      sortOrder: settings.template.items.length,
+    });
+    expect(nextDay.tasks.at(-1)?.id).toMatch(/^routine_/);
+    expect(reopenedHistorical.dailyLog.templateVersion).toBe(1);
+    expect(nextDay.dailyLog.templateVersion).toBe(2);
+
+    const historicalEntry = await repository.createCareEntry(context, {
+      localDate: historicalDate,
+      taskKey: "custom",
+      taskLabel: "Historical care",
+      childIds: [historical.children[0].id],
+      caregiverIds: [historical.caregivers[0].id],
+      status: "completed",
+      occurredAt: `${historicalDate}T12:00:00.000Z`,
+    });
+    expect(historicalEntry.dailyLogId).toBe(historical.dailyLog.id);
+    expect(historicalEntry.lateEntry).toBe(true);
+  });
+
+  it("keeps a finalized today log bound to its original routine version", async () => {
+    const repository = new MemoryParentingRepository();
+    const context = await repository.resolveContext(identity);
+    const today = localDateInTimezone(new Date(), context.workspace.timezone);
+    const originalToday = await repository.getDashboard(context, today);
+    const originalLabel = originalToday.tasks[0].label;
+    await repository.finalizeDailyLog(context, today);
+    const settings = await repository.getSettings(context);
+
+    const updatedSettings = await repository.updateSettings(context, {
+      name: settings.workspace.name,
+      timezone: settings.workspace.timezone,
+      hardDeleteEnabled: settings.workspace.hardDeleteEnabled,
+      children: settings.children.map((child) => ({
+        id: child.id,
+        displayName: child.displayName,
+        birthdate: child.birthdate,
       })),
       caregivers: settings.caregivers.map((caregiver) => ({
         id: caregiver.id,
@@ -141,19 +354,18 @@ describe("memory repository integration", () => {
       })),
       routineItems: settings.template.items.map((item, index) => ({
         id: item.id,
-        label: index === 0 ? "Updated routine label" : item.label,
+        label: index === 0 ? "Changed after finalizing" : item.label,
         suggestedTime: item.suggestedTime,
         childIds: item.childIds,
         active: item.active,
       })),
     });
 
-    const reopenedHistorical = await repository.getDashboard(context, historicalDate);
-    const nextDay = await repository.getDashboard(context, "2026-07-15");
-    expect(reopenedHistorical.tasks[0].label).toBe(originalLabel);
-    expect(nextDay.tasks[0].label).toBe("Updated routine label");
-    expect(reopenedHistorical.dailyLog.templateVersion).toBe(1);
-    expect(nextDay.dailyLog.templateVersion).toBe(2);
+    const finalizedToday = await repository.getDashboard(context, today);
+    expect(updatedSettings.template.version).toBe(2);
+    expect(finalizedToday.dailyLog.status).toBe("finalized");
+    expect(finalizedToday.dailyLog.templateVersion).toBe(1);
+    expect(finalizedToday.tasks[0].label).toBe(originalLabel);
   });
 
   it("generates a PDF and checksum evidence package from finalized records", async () => {
@@ -188,7 +400,7 @@ describe("memory repository integration", () => {
       name: settings.workspace.name,
       timezone: settings.workspace.timezone,
       hardDeleteEnabled: true,
-      children: settings.children.map((child) => ({ id: child.id, displayName: child.displayName })),
+      children: settings.children.map((child) => ({ id: child.id, displayName: child.displayName, birthdate: child.birthdate })),
       caregivers: settings.caregivers.map((caregiver) => ({ id: caregiver.id, displayName: caregiver.displayName, relationship: caregiver.relationship })),
       routineItems: settings.template.items.map((item) => ({ id: item.id, label: item.label, suggestedTime: item.suggestedTime, childIds: item.childIds, active: item.active })),
     });
