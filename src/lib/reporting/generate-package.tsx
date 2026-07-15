@@ -1,0 +1,73 @@
+import "server-only";
+
+import { renderToBuffer } from "@react-pdf/renderer";
+import JSZip from "jszip";
+
+import { canonicalJson, sha256 } from "@/lib/domain/integrity";
+import { getPrivateFile, putPrivateFile } from "@/lib/storage/private-files";
+import type { ReportSource } from "@/lib/repository/repository";
+import { ReportDocument } from "./report-document";
+
+function safeName(name: string) {
+  return name.replace(/[^a-zA-Z0-9._-]/g, "_").slice(0, 120);
+}
+
+export async function generateEvidencePackage(source: ReportSource) {
+  const pdf = await renderToBuffer(<ReportDocument source={source} />);
+  const manifest = {
+    schemaVersion: 1,
+    reportId: source.snapshot.id,
+    workspaceId: source.workspace.id,
+    generatedAt: source.snapshot.createdAt,
+    timezone: source.workspace.timezone,
+    filters: source.snapshot.filters,
+    records: [
+      ...source.entries.map((record) => ({ type: "care_entry", id: record.id, currentRevisionId: record.currentRevisionId })),
+      ...source.appointments.map((record) => ({ type: "appointment", id: record.id, currentRevisionId: record.currentRevisionId })),
+      ...source.incidents.map((record) => ({ type: "incident", id: record.id, currentRevisionId: record.currentRevisionId })),
+    ],
+    revisions: source.revisions.map((revision) => ({
+      id: revision.id,
+      recordType: revision.recordType,
+      recordId: revision.recordId,
+      revisionNumber: revision.revisionNumber,
+      previousRevisionId: revision.previousRevisionId,
+      recordedAt: revision.recordedAt,
+      authorId: revision.authorId,
+      reason: revision.reason,
+      sha256: revision.hash,
+    })),
+    attachments: source.attachments.map((attachment) => ({
+      id: attachment.id,
+      recordType: attachment.recordType,
+      recordId: attachment.recordId,
+      originalName: attachment.originalName,
+      contentType: attachment.contentType,
+      size: attachment.size,
+      uploadedAt: attachment.uploadedAt,
+      sha256: attachment.sha256,
+    })),
+  };
+  const manifestJson = canonicalJson(manifest);
+  const manifestHash = sha256(manifestJson);
+  const pdfHash = sha256(pdf);
+  const zip = new JSZip();
+  zip.file("parenting-log.pdf", pdf);
+  zip.file("manifest.json", `${JSON.stringify(manifest, null, 2)}\n`);
+  const checksums = [`${pdfHash}  parenting-log.pdf`, `${manifestHash}  manifest.json`];
+
+  for (const attachment of source.attachments) {
+    const file = await getPrivateFile(attachment.pathname);
+    if (!file) continue;
+    const pathname = `attachments/${attachment.id}-${safeName(attachment.originalName)}`;
+    zip.file(pathname, file.body);
+    checksums.push(`${attachment.sha256}  ${pathname}`);
+  }
+  zip.file("checksums.sha256", `${checksums.join("\n")}\n`);
+  const zipBuffer = await zip.generateAsync({ type: "nodebuffer", compression: "DEFLATE" });
+
+  const base = `reports/${source.workspace.id}/${source.snapshot.id}`;
+  const pdfPathname = await putPrivateFile(`${base}/parenting-log.pdf`, pdf, "application/pdf");
+  const zipPathname = await putPrivateFile(`${base}/evidence-package.zip`, zipBuffer, "application/zip");
+  return { manifestHash, pdfPathname, zipPathname };
+}

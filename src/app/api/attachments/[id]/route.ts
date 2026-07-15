@@ -1,0 +1,21 @@
+import { NextResponse } from "next/server";
+
+import { getRepository, getRequestContext } from "@/lib/repository";
+import { getPrivateFile } from "@/lib/storage/private-files";
+
+export async function GET(_request: Request, { params }: { params: Promise<{ id: string }> }) {
+  try {
+    const { id } = await params;
+    const repository = await getRepository();
+    const context = await getRequestContext();
+    const attachment = await repository.getAttachment(context, id);
+    if (!attachment) return NextResponse.json({ error: "Not found" }, { status: 404 });
+    const file = await getPrivateFile(attachment.pathname);
+    if (!file) return NextResponse.json({ error: "Not found" }, { status: 404 });
+    await repository.recordAuditEvent(context, { actorId: context.member.id, action: "downloaded", targetType: "attachment", targetId: attachment.id });
+    const safeName = attachment.originalName.replace(/["\r\n]/g, "_");
+    return new NextResponse(Buffer.from(file.body), { headers: { "Content-Type": file.contentType, "Content-Disposition": `attachment; filename="${safeName}"`, "Cache-Control": "private, no-store", "X-Content-Type-Options": "nosniff" } });
+  } catch {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+}

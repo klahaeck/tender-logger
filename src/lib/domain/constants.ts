@@ -1,0 +1,37 @@
+import type { CareStatus, CareTaskKey, IncidentCategory } from "./types";
+
+export const CARE_TASKS: Array<{
+  key: CareTaskKey;
+  label: string;
+  suggestedTime: string;
+}> = [
+  { key: "wake_up", label: "Wake up", suggestedTime: "07:00" },
+  { key: "get_dressed", label: "Get dressed", suggestedTime: "07:15" },
+  { key: "prepare_breakfast", label: "Prepare breakfast", suggestedTime: "07:30" },
+  { key: "prepare_lunch", label: "Prepare lunch", suggestedTime: "07:45" },
+  { key: "school_dropoff", label: "School drop-off", suggestedTime: "08:15" },
+  { key: "school_pickup", label: "School pick-up", suggestedTime: "15:15" },
+  { key: "time_together", label: "Time together", suggestedTime: "16:00" },
+  { key: "naptime", label: "Naptime", suggestedTime: "13:00" },
+  { key: "prepare_dinner", label: "Prepare dinner", suggestedTime: "18:00" },
+  { key: "clean_spaces", label: "Clean child spaces", suggestedTime: "19:00" },
+  { key: "bedtime_pajamas", label: "Bedtime · pajamas", suggestedTime: "19:30" },
+  { key: "bedtime_teeth", label: "Bedtime · brush teeth", suggestedTime: "19:40" },
+  { key: "bedtime_story", label: "Bedtime · story", suggestedTime: "19:50" },
+];
+
+export const CARE_STATUS_LABELS: Record<CareStatus, string> = {
+  completed: "Completed",
+  partial: "Partial",
+  missed: "Missed",
+  not_applicable: "Not applicable",
+};
+
+export const INCIDENT_LABELS: Record<IncidentCategory, string> = {
+  safety_hazard: "Safety hazard",
+  concerning_interaction: "Concerning interaction",
+  other: "Other factual incident",
+};
+
+export const RECORD_DISCLAIMER =
+  "This application is a factual recordkeeping aid. It does not provide legal advice or guarantee that a record will be admitted or given any particular weight by a court.";

@@ -1,0 +1,72 @@
+import "server-only";
+
+import {
+  MongoClient,
+  ServerApiVersion,
+  type Collection,
+  type Document,
+} from "mongodb";
+
+declare global {
+  var __parentingMongoClientPromise: Promise<MongoClient> | undefined;
+}
+
+export function mongoConfigured(): boolean {
+  return Boolean(process.env.MONGODB_URI);
+}
+
+function createClient(): MongoClient {
+  const uri = process.env.MONGODB_URI;
+  if (!uri) throw new Error("MONGODB_URI is not configured");
+  return new MongoClient(uri, {
+    serverApi: {
+      version: ServerApiVersion.v1,
+      strict: true,
+      deprecationErrors: true,
+    },
+    maxPoolSize: 10,
+    minPoolSize: 0,
+  });
+}
+
+export async function getMongoClient(): Promise<MongoClient> {
+  globalThis.__parentingMongoClientPromise ??= createClient().connect();
+  return globalThis.__parentingMongoClientPromise;
+}
+
+export async function getDatabase() {
+  const client = await getMongoClient();
+  return client.db(process.env.MONGODB_DB ?? "parenting_log");
+}
+
+export async function collection<T extends Document>(
+  name: string,
+): Promise<Collection<T>> {
+  return (await getDatabase()).collection<T>(name);
+}
+
+export async function ensureMongoIndexes(): Promise<void> {
+  const db = await getDatabase();
+  await Promise.all([
+    db.collection("members").createIndex(
+      { workspaceId: 1, email: 1 },
+      { unique: true, name: "workspace_email_unique" },
+    ),
+    db.collection("members").createIndex({ authUserId: 1 }, { sparse: true }),
+    db.collection("careEntries").createIndex({ workspaceId: 1, occurredAt: -1 }),
+    db.collection("careEntries").createIndex({ workspaceId: 1, dailyLogId: 1 }),
+    db.collection("appointments").createIndex({ workspaceId: 1, scheduledAt: -1 }),
+    db.collection("incidents").createIndex({ workspaceId: 1, occurredAt: -1 }),
+    db.collection("recordRevisions").createIndex(
+      { workspaceId: 1, recordType: 1, recordId: 1, revisionNumber: 1 },
+      { unique: true },
+    ),
+    db.collection("attachments").createIndex({ workspaceId: 1, recordId: 1 }),
+    db.collection("auditEvents").createIndex({ workspaceId: 1, occurredAt: 1 }),
+    db.collection("reportSnapshots").createIndex({ workspaceId: 1, createdAt: -1 }),
+    db.collection("dailyLogs").createIndex(
+      { workspaceId: 1, localDate: 1 },
+      { unique: true },
+    ),
+  ]);
+}

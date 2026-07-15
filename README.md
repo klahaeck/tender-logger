@@ -1,36 +1,76 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Tenderlog
 
-## Getting Started
+Tenderlog is a private, mobile-first daily parenting log for factual caregiving records, appointments, incidents, immutable corrections, and attorney-reviewable evidence packages.
 
-First, run the development server:
+It is a recordkeeping tool, not legal advice, an emergency service, or a guarantee that any record will be admitted or given a particular weight by a court. Ask local counsel what should be collected, retained, disclosed, or submitted.
+
+## What is implemented
+
+- Per-child daily routine templates and a fast “Today” checklist
+- Caregiver attribution, actual occurrence time, duration, outcomes, and factual notes
+- Scheduled appointments with responsibility and attendance outcomes
+- Neutral incident records for safety hazards and concerning interactions
+- Append-only revision history with canonical SHA-256 hashes
+- Server-controlled entry timestamps and visible late-entry labels
+- Private JPEG, PNG, HEIC, and PDF attachments with file-signature validation
+- Searchable combined timeline and authorized attachment downloads
+- Finalized-day visibility for read-only attorney reviewers
+- Vercel Workflow report generation with PDF, original files, JSON manifest, and checksum ZIP
+- Configurable owner-only hard purge with MFA requirement and content-free tombstones
+- MongoDB Atlas persistence plus a clearly marked in-memory local demo mode
+
+## Local development
+
+Requirements: Node.js 20.19 or newer and npm 11.
 
 ```bash
+npm install
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Open [http://localhost:3000](http://localhost:3000). With no environment variables, the app runs against an in-memory sample workspace. It is intentionally labeled as demo data and must not be used for real records.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+Useful checks:
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+```bash
+npm run lint
+npm run typecheck
+npm test
+npm run build
+npm run test:e2e
+```
 
-## Learn More
+MongoDB integration tests run when `TEST_MONGODB_URI` is present. Browser tests require Playwright’s Chromium browser (`npx playwright install chromium`).
 
-To learn more about Next.js, take a look at the following resources:
+## Production configuration
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+Copy `.env.example` to `.env.local` for development. Configure the same values in Vercel for production.
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+1. Create a dedicated MongoDB Atlas database and least-privilege application user.
+2. Create a Clerk application, disable unrestricted registration, enable MFA, and configure the owner email.
+3. Create a Vercel Private Blob store.
+4. Deploy to Vercel. Workflow SDK routes are generated during the Next.js build.
+5. Sign in with `APP_OWNER_EMAIL`; the first matching login bootstraps the private workspace and its initial routine template.
+6. Replace placeholder child and caregiver names in Settings before entering real records.
 
-## Deploy on Vercel
+Vercel Workflows use the deployment’s managed workflow backend automatically. Private Blob supports either the legacy read/write token or Vercel OIDC plus a store ID.
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+## Data integrity model
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+Saved records are never silently overwritten. A correction creates a new revision containing the previous revision ID, reason, author, server timestamp, and a hash of the canonical payload plus the previous hash. Reports capture the included revision and attachment IDs at creation time.
+
+The integrity controls are tamper-evident application safeguards, not a claim that the system is tamper-proof or that a report is self-authenticating. Export packages include the underlying manifest and checksums so an attorney can evaluate and preserve them with the originals.
+
+Hard purge is disabled by default. When enabled, it removes active record content, attachments, and stored reports containing the record while retaining a content-free deletion tombstone. Already downloaded copies cannot be revoked, and provider backups expire according to their configured retention policy.
+
+## Architecture
+
+- Next.js App Router, TypeScript, Tailwind CSS, and shadcn/ui
+- TanStack Query for hydrated interactive reads and cache invalidation
+- Validated Server Actions for mutations and authenticated GET Route Handlers for reads
+- Native MongoDB Node.js driver with Stable API and transactional record/revision/audit writes
+- Clerk identity with application roles stored in MongoDB
+- Vercel Private Blob for original files and report artifacts
+- React PDF, JSZip, and Vercel Workflow SDK for evidence packages
+
+The repository adapter automatically selects MongoDB when `MONGODB_URI` is configured; otherwise it uses the development-only memory adapter.

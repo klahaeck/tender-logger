@@ -1,0 +1,278 @@
+"use server";
+
+import { revalidatePath } from "next/cache";
+import { fileTypeFromBuffer } from "file-type";
+
+import { clerkConfigured } from "@/lib/auth/identity";
+import { id, sha256 } from "@/lib/domain/integrity";
+import {
+  appointmentSchema,
+  careEntrySchema,
+  correctionSchema,
+  incidentSchema,
+  inviteSchema,
+  purgeSchema,
+  reportSchema,
+  workspaceSettingsSchema,
+} from "@/lib/domain/schemas";
+import type { ActionResult, Attachment, RecordType } from "@/lib/domain/types";
+import { getRepository, getRequestContext } from "@/lib/repository";
+import { generateEvidencePackage } from "@/lib/reporting/generate-package";
+import { deletePrivateFiles, putPrivateFile } from "@/lib/storage/private-files";
+import { generateReportWorkflow } from "@/workflows/generate-report";
+
+const MAX_ATTACHMENT_BYTES = 15 * 1024 * 1024;
+const ALLOWED_TYPES = new Set([
+  "image/jpeg",
+  "image/png",
+  "image/heic",
+  "application/pdf",
+]);
+
+function fail(error: unknown): ActionResult<never> {
+  const message = error instanceof Error ? error.message : "Unexpected error";
+  const safe: Record<string, string> = {
+    FORBIDDEN: "You do not have permission to perform this action.",
+    UNAUTHENTICATED: "Please sign in to continue.",
+    NOT_FOUND: "The requested record was not found.",
+    ALREADY_INVITED: "That reviewer already has access or a pending invitation.",
+    HARD_DELETE_DISABLED: "Hard deletion is disabled in workspace settings.",
+    MFA_REQUIRED: "Multi-factor authentication is required for permanent deletion.",
+  };
+  return { ok: false, error: safe[message] ?? (process.env.NODE_ENV === "production" ? "The request could not be completed." : message) };
+}
+
+function validationFailure(error: { flatten(): { fieldErrors: Record<string, string[]> } }): ActionResult<never> {
+  return { ok: false, error: "Check the highlighted fields.", fieldErrors: error.flatten().fieldErrors };
+}
+
+function refreshRecords() {
+  revalidatePath("/");
+  revalidatePath("/timeline");
+  revalidatePath("/appointments");
+  revalidatePath("/incidents");
+  revalidatePath("/reports");
+  revalidatePath("/settings");
+}
+
+export async function createCareEntryAction(input: unknown): Promise<ActionResult<{ id: string }>> {
+  const parsed = careEntrySchema.safeParse(input);
+  if (!parsed.success) return validationFailure(parsed.error);
+  try {
+    const repository = await getRepository();
+    const context = await getRequestContext();
+    const entry = await repository.createCareEntry(context, parsed.data);
+    refreshRecords();
+    return { ok: true, data: { id: entry.id } };
+  } catch (error) {
+    return fail(error);
+  }
+}
+
+export async function createAppointmentAction(input: unknown): Promise<ActionResult<{ id: string }>> {
+  const parsed = appointmentSchema.safeParse(input);
+  if (!parsed.success) return validationFailure(parsed.error);
+  try {
+    const repository = await getRepository();
+    const context = await getRequestContext();
+    const appointment = await repository.createAppointment(context, parsed.data);
+    refreshRecords();
+    return { ok: true, data: { id: appointment.id } };
+  } catch (error) {
+    return fail(error);
+  }
+}
+
+export async function createIncidentAction(input: unknown): Promise<ActionResult<{ id: string }>> {
+  const parsed = incidentSchema.safeParse(input);
+  if (!parsed.success) return validationFailure(parsed.error);
+  try {
+    const repository = await getRepository();
+    const context = await getRequestContext();
+    const incident = await repository.createIncident(context, parsed.data);
+    refreshRecords();
+    return { ok: true, data: { id: incident.id } };
+  } catch (error) {
+    return fail(error);
+  }
+}
+
+export async function correctRecordAction(input: unknown): Promise<ActionResult<{ revisionId: string }>> {
+  const parsed = correctionSchema.safeParse(input);
+  if (!parsed.success) return validationFailure(parsed.error);
+  try {
+    const repository = await getRepository();
+    const context = await getRequestContext();
+    const revision = await repository.correctRecord(context, parsed.data);
+    refreshRecords();
+    return { ok: true, data: { revisionId: revision.id } };
+  } catch (error) {
+    return fail(error);
+  }
+}
+
+export async function finalizeDailyLogAction(localDate: string): Promise<ActionResult<{ finalizedAt?: string }>> {
+  try {
+    const repository = await getRepository();
+    const context = await getRequestContext();
+    const log = await repository.finalizeDailyLog(context, localDate);
+    refreshRecords();
+    return { ok: true, data: { finalizedAt: log.finalizedAt } };
+  } catch (error) {
+    return fail(error);
+  }
+}
+
+export async function generateReportAction(input: unknown): Promise<ActionResult<{ reportId: string; workflowRunId?: string }>> {
+  const parsed = reportSchema.safeParse(input);
+  if (!parsed.success) return validationFailure(parsed.error);
+  try {
+    const repository = await getRepository();
+    const context = await getRequestContext();
+    const report = await repository.createReport(context, parsed.data);
+    let workflowRunId: string | undefined;
+
+    if (process.env.VERCEL) {
+      const { start } = await import("workflow/api");
+      const run = await start(generateReportWorkflow, [{ context, reportId: report.id }]);
+      workflowRunId = run.runId;
+    } else {
+      const source = await repository.getReportSource(context, report.id);
+      if (!source) throw new Error("REPORT_NOT_FOUND");
+      const artifacts = await generateEvidencePackage(source);
+      await repository.markReportReady(context, report.id, artifacts);
+    }
+
+    revalidatePath("/reports");
+    return { ok: true, data: { reportId: report.id, workflowRunId } };
+  } catch (error) {
+    return fail(error);
+  }
+}
+
+export async function uploadAttachmentAction(formData: FormData): Promise<ActionResult<{ attachmentId: string }>> {
+  try {
+    const recordType = formData.get("recordType")?.toString() as RecordType;
+    const recordId = formData.get("recordId")?.toString();
+    const file = formData.get("file");
+    if (!recordId || !["care_entry", "appointment", "incident"].includes(recordType)) {
+      return { ok: false, error: "Choose a valid record." };
+    }
+    if (!(file instanceof File) || file.size === 0) return { ok: false, error: "Choose a file." };
+    if (file.size > MAX_ATTACHMENT_BYTES) return { ok: false, error: "Files must be 15 MB or smaller." };
+
+    const bytes = new Uint8Array(await file.arrayBuffer());
+    const detected = await fileTypeFromBuffer(bytes);
+    const contentType = detected?.mime ?? "";
+    if (!ALLOWED_TYPES.has(contentType)) {
+      return { ok: false, error: "Only JPEG, PNG, HEIC, and PDF files are accepted." };
+    }
+
+    const repository = await getRepository();
+    const context = await getRequestContext();
+    if (context.member.role !== "owner") throw new Error("FORBIDDEN");
+    const bundle = await repository.getRecordBundle(context, recordType, recordId);
+    if (!bundle) throw new Error("NOT_FOUND");
+    if (bundle.attachments.length >= 5) return { ok: false, error: "Each record can have up to five attachments." };
+
+    const attachmentId = id("attachment");
+    const extension = detected?.ext === "jpg" ? "jpg" : detected?.ext ?? "bin";
+    const pathname = await putPrivateFile(
+      `attachments/${context.workspace.id}/${recordId}/${attachmentId}.${extension}`,
+      bytes,
+      contentType,
+    );
+    const attachment: Attachment = {
+      id: attachmentId,
+      workspaceId: context.workspace.id,
+      recordType,
+      recordId,
+      revisionId: bundle.record.currentRevisionId,
+      originalName: file.name.slice(0, 180),
+      contentType: contentType as Attachment["contentType"],
+      size: file.size,
+      sha256: sha256(bytes),
+      pathname,
+      uploadedAt: new Date().toISOString(),
+      uploadedBy: context.member.id,
+    };
+    await repository.addAttachment(context, attachment);
+    refreshRecords();
+    return { ok: true, data: { attachmentId } };
+  } catch (error) {
+    return fail(error);
+  }
+}
+
+export async function updateSettingsAction(input: unknown): Promise<ActionResult> {
+  const parsed = workspaceSettingsSchema.safeParse(input);
+  if (!parsed.success) return validationFailure(parsed.error);
+  try {
+    const repository = await getRepository();
+    const context = await getRequestContext();
+    await repository.updateSettings(context, parsed.data);
+    refreshRecords();
+    return { ok: true };
+  } catch (error) {
+    return fail(error);
+  }
+}
+
+export async function inviteReviewerAction(input: unknown): Promise<ActionResult<{ memberId: string }>> {
+  const parsed = inviteSchema.safeParse(input);
+  if (!parsed.success) return validationFailure(parsed.error);
+  try {
+    const repository = await getRepository();
+    const context = await getRequestContext();
+    const member = await repository.inviteReviewer(context, parsed.data);
+    if (clerkConfigured()) {
+      const { clerkClient } = await import("@clerk/nextjs/server");
+      const client = await clerkClient();
+      await client.invitations.createInvitation({
+        emailAddress: parsed.data.email,
+        redirectUrl: process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000",
+        publicMetadata: { workspaceId: context.workspace.id, role: "reviewer" },
+      });
+    }
+    revalidatePath("/settings");
+    return { ok: true, data: { memberId: member.id } };
+  } catch (error) {
+    return fail(error);
+  }
+}
+
+export async function revokeReviewerAction(memberId: string): Promise<ActionResult> {
+  try {
+    const repository = await getRepository();
+    const context = await getRequestContext();
+    await repository.revokeReviewer(context, memberId);
+    revalidatePath("/settings");
+    return { ok: true };
+  } catch (error) {
+    return fail(error);
+  }
+}
+
+export async function hardPurgeAction(input: unknown): Promise<ActionResult> {
+  const parsed = purgeSchema.safeParse(input);
+  if (!parsed.success) return validationFailure(parsed.error);
+  try {
+    const repository = await getRepository();
+    const context = await getRequestContext();
+    const bundle = await repository.getRecordBundle(context, parsed.data.recordType, parsed.data.recordId);
+    if (!bundle) throw new Error("NOT_FOUND");
+    const revisionIds = bundle.revisions.map((revision) => revision.id);
+    const reports = (await repository.getReports(context)).filter((report) =>
+      report.recordRevisionIds.some((revisionId) => revisionIds.includes(revisionId)),
+    );
+    await repository.hardPurge(context, parsed.data);
+    await deletePrivateFiles([
+      ...bundle.attachments.map((attachment) => attachment.pathname),
+      ...reports.flatMap((report) => [report.pdfPathname, report.zipPathname].filter(Boolean) as string[]),
+    ]);
+    refreshRecords();
+    return { ok: true };
+  } catch (error) {
+    return fail(error);
+  }
+}
