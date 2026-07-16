@@ -13,6 +13,8 @@ type BillingSubscriptionItemLike = {
   plan: { slug: string; isDefault: boolean } | null;
 };
 
+type PrivateMetadataLike = Record<string, unknown> | null | undefined;
+
 export class SubscriptionRequiredError extends Error {
   constructor() {
     super("SUBSCRIPTION_REQUIRED");
@@ -85,6 +87,12 @@ export function hasAllowedBillingPlan(
   );
 }
 
+export function privateMetadataGrantsComplimentaryAccess(
+  privateMetadata: PrivateMetadataLike,
+): boolean {
+  return privateMetadata?.complimentaryAccess === true;
+}
+
 export async function assertWorkspaceBillingAccess(
   context: RequestContext,
 ): Promise<void> {
@@ -96,15 +104,50 @@ export async function assertWorkspaceBillingAccess(
   try {
     const { clerkClient } = await import("@clerk/nextjs/server");
     const client = await clerkClient();
-    const subscription = await client.billing.getUserBillingSubscription(
-      context.billingOwnerAuthUserId,
-    );
+    let billingError: unknown;
+    let billingCheckFailed = false;
 
-    if (!hasAllowedBillingPlan(subscription.subscriptionItems)) {
-      throw new SubscriptionRequiredError();
+    try {
+      const subscription = await client.billing.getUserBillingSubscription(
+        context.billingOwnerAuthUserId,
+      );
+
+      if (hasAllowedBillingPlan(subscription.subscriptionItems)) {
+        return;
+      }
+    } catch (error) {
+      billingCheckFailed = true;
+      billingError = error;
     }
+
+    try {
+      const owner = await client.users.getUser(context.billingOwnerAuthUserId);
+      if (privateMetadataGrantsComplimentaryAccess(owner.privateMetadata)) {
+        return;
+      }
+    } catch (metadataError) {
+      throw new BillingAccessUnavailableError({
+        cause: new AggregateError(
+          billingCheckFailed
+            ? [billingError, metadataError]
+            : [metadataError],
+          "Clerk access checks failed",
+        ),
+      });
+    }
+
+    if (billingCheckFailed) {
+      throw new BillingAccessUnavailableError({ cause: billingError });
+    }
+
+    throw new SubscriptionRequiredError();
   } catch (error) {
-    if (isSubscriptionRequiredError(error)) throw error;
+    if (
+      isSubscriptionRequiredError(error) ||
+      isBillingAccessUnavailableError(error)
+    ) {
+      throw error;
+    }
     throw new BillingAccessUnavailableError({ cause: error });
   }
 }

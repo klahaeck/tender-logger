@@ -81,6 +81,6 @@ The repository adapter uses MongoDB when `MONGODB_URI` is configured. The develo
 
 ## Billing access
 
-The public `/pricing` page renders Clerk's user Pricing Table. Private workspace requests verify the workspace owner's Clerk Billing Subscription on the server, including Route Handlers and Server Actions. The default configuration accepts only the paid subscriber Plan (`general`); the hidden default Free Plan (`free_user`) does not grant application access. Override the paid-plan allowlist with the comma-separated `CLERK_ALLOWED_PLAN_SLUGS` environment variable if Plan slugs differ between Clerk instances.
+The public `/pricing` page renders Clerk's user Pricing Table. Private workspace requests verify the workspace owner's Clerk Billing Subscription on the server, including Route Handlers and Server Actions. The default configuration accepts the paid subscriber Plan (`general`) or an explicit `complimentaryAccess: true` value in the owner's Clerk private metadata. The hidden default Free Plan (`free_user`) alone does not grant application access. Override the paid-plan allowlist with the comma-separated `CLERK_ALLOWED_PLAN_SLUGS` environment variable if Plan slugs differ between Clerk instances.
 
 Invited reviewers inherit the workspace owner's billing access. A reviewer is never required to buy a separate Plan, and the server resolves the owner before checking Clerk so this rule applies to pages, API reads, downloads, and mutations.

@@ -4,17 +4,20 @@ import {
   allowedBillingPlanSlugs,
   assertWorkspaceBillingAccess,
   hasAllowedBillingPlan,
+  privateMetadataGrantsComplimentaryAccess,
   subscriptionItemGrantsAccess,
 } from "@/lib/auth/billing";
 import type { RequestContext } from "@/lib/repository/repository";
 
-const { getUserBillingSubscription } = vi.hoisted(() => ({
+const { getUser, getUserBillingSubscription } = vi.hoisted(() => ({
+  getUser: vi.fn(),
   getUserBillingSubscription: vi.fn(),
 }));
 
 vi.mock("@clerk/nextjs/server", () => ({
   clerkClient: async () => ({
     billing: { getUserBillingSubscription },
+    users: { getUser },
   }),
 }));
 
@@ -69,6 +72,8 @@ describe("billing access", () => {
     vi.stubEnv("NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY", "pk_test_example");
     vi.stubEnv("CLERK_SECRET_KEY", "sk_test_example");
     vi.stubEnv("CLERK_ALLOWED_PLAN_SLUGS", "general");
+    getUser.mockReset();
+    getUser.mockResolvedValue({ privateMetadata: {} });
     getUserBillingSubscription.mockReset();
   });
 
@@ -144,6 +149,16 @@ describe("billing access", () => {
     ]);
   });
 
+  it("requires a literal true complimentary access value", () => {
+    expect(
+      privateMetadataGrantsComplimentaryAccess({ complimentaryAccess: true }),
+    ).toBe(true);
+    expect(
+      privateMetadataGrantsComplimentaryAccess({ complimentaryAccess: "true" }),
+    ).toBe(false);
+    expect(privateMetadataGrantsComplimentaryAccess({})).toBe(false);
+  });
+
   it("checks a reviewer against the workspace owner's active Plan", async () => {
     getUserBillingSubscription.mockResolvedValue({
       subscriptionItems: [item({ slug: "general" })],
@@ -154,6 +169,22 @@ describe("billing access", () => {
     ).resolves.toBeUndefined();
     expect(getUserBillingSubscription).toHaveBeenCalledWith("owner_user");
     expect(getUserBillingSubscription).not.toHaveBeenCalledWith("reviewer_user");
+    expect(getUser).not.toHaveBeenCalled();
+  });
+
+  it("gives owners and their reviewers complimentary access through owner metadata", async () => {
+    getUserBillingSubscription.mockResolvedValue({
+      subscriptionItems: [item({ slug: "free_user" })],
+    });
+    getUser.mockResolvedValue({
+      privateMetadata: { complimentaryAccess: true },
+    });
+
+    await expect(
+      assertWorkspaceBillingAccess(reviewerContext),
+    ).resolves.toBeUndefined();
+    expect(getUser).toHaveBeenCalledWith("owner_user");
+    expect(getUser).not.toHaveBeenCalledWith("reviewer_user");
   });
 
   it("denies a workspace whose owner has no allowed active Plan", async () => {
@@ -164,6 +195,18 @@ describe("billing access", () => {
     await expect(assertWorkspaceBillingAccess(reviewerContext)).rejects.toThrow(
       "SUBSCRIPTION_REQUIRED",
     );
+    expect(getUser).toHaveBeenCalledWith("owner_user");
+  });
+
+  it("accepts complimentary access when billing verification is unavailable", async () => {
+    getUserBillingSubscription.mockRejectedValue(new Error("billing unavailable"));
+    getUser.mockResolvedValue({
+      privateMetadata: { complimentaryAccess: true },
+    });
+
+    await expect(
+      assertWorkspaceBillingAccess(reviewerContext),
+    ).resolves.toBeUndefined();
   });
 
   it("fails closed when Clerk cannot verify billing access", async () => {
