@@ -63,12 +63,43 @@ describe("domain validation", () => {
           label: "Evening walk",
           suggestedTime: "18:30",
           childIds: ["child_1", "child_2"],
+          weekdays: [0, 6],
           active: true,
         },
       ],
     });
 
     expect(result.success).toBe(true);
-    if (result.success) expect(result.data.caregivers[1].id).toBeUndefined();
+    if (result.success) {
+      expect(result.data.caregivers[1].id).toBeUndefined();
+      expect(result.data.routineItems[0].weekdays).toEqual([0, 6]);
+    }
+  });
+
+  it("requires at least one unique valid weekday for each routine item", () => {
+    const base = {
+      name: "Family workspace",
+      timezone: "America/Chicago",
+      hardDeleteEnabled: false,
+      children: [{ id: "child_1", displayName: "Child one", birthdate: "2018-01-15" }],
+      caregivers: [{ id: "caregiver_1", displayName: "Caregiver", relationship: "Parent" }],
+      routineItems: [{
+        label: "Naptime",
+        suggestedTime: "13:00",
+        childIds: ["child_1"],
+        weekdays: [] as number[],
+        active: true,
+      }],
+    };
+
+    expect(workspaceSettingsSchema.safeParse(base).success).toBe(false);
+    expect(workspaceSettingsSchema.safeParse({
+      ...base,
+      routineItems: [{ ...base.routineItems[0], weekdays: [0, 0] }],
+    }).success).toBe(false);
+    expect(workspaceSettingsSchema.safeParse({
+      ...base,
+      routineItems: [{ ...base.routineItems[0], weekdays: [7] }],
+    }).success).toBe(false);
   });
 });

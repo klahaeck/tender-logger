@@ -151,6 +151,7 @@ describe("memory repository integration", () => {
         label: item.label,
         suggestedTime: item.suggestedTime,
         childIds: item.childIds,
+        weekdays: item.weekdays,
         active: item.active,
       })),
     });
@@ -179,6 +180,7 @@ describe("memory repository integration", () => {
         label: item.label,
         suggestedTime: item.suggestedTime,
         childIds: ["child_added"],
+        weekdays: item.weekdays,
         active: item.active,
       })),
     });
@@ -216,6 +218,7 @@ describe("memory repository integration", () => {
         label: item.label,
         suggestedTime: item.suggestedTime,
         childIds: item.childIds,
+        weekdays: item.weekdays,
         active: item.active,
       })),
     });
@@ -229,6 +232,44 @@ describe("memory repository integration", () => {
     });
     expect(updated.caregivers[2].id).toMatch(/^caregiver_/);
     expect((await repository.getDashboard(context, "2026-07-15")).caregivers).toHaveLength(3);
+  });
+
+  it("shows a routine item only on its selected weekdays", async () => {
+    const repository = new MemoryParentingRepository();
+    const context = await repository.resolveContext(identity);
+    const settings = await repository.getSettings(context);
+    const naptime = settings.template.items.find((item) => item.taskKey === "naptime");
+    expect(naptime).toBeDefined();
+
+    const updated = await repository.updateSettings(context, {
+      name: settings.workspace.name,
+      timezone: settings.workspace.timezone,
+      hardDeleteEnabled: settings.workspace.hardDeleteEnabled,
+      children: settings.children.map((child) => ({
+        id: child.id,
+        displayName: child.displayName,
+        birthdate: child.birthdate,
+      })),
+      caregivers: settings.caregivers.map((caregiver) => ({
+        id: caregiver.id,
+        displayName: caregiver.displayName,
+        relationship: caregiver.relationship,
+      })),
+      routineItems: settings.template.items.map((item) => ({
+        id: item.id,
+        label: item.label,
+        suggestedTime: item.suggestedTime,
+        childIds: item.childIds,
+        weekdays: item.taskKey === "naptime" ? [0, 6] : item.weekdays,
+        active: item.active,
+      })),
+    });
+
+    expect(updated.template.items.find((item) => item.id === naptime?.id)?.weekdays).toEqual([0, 6]);
+    expect((await repository.getDashboard(context, "2026-07-18")).tasks)
+      .toContainEqual(expect.objectContaining({ id: naptime?.id, label: "Naptime" }));
+    expect((await repository.getDashboard(context, "2026-07-20")).tasks)
+      .not.toContainEqual(expect.objectContaining({ id: naptime?.id }));
   });
 
   it("uses the latest routine for empty historical days and freezes it after an entry", async () => {
@@ -262,12 +303,14 @@ describe("memory repository integration", () => {
           label: index === 0 ? "Updated routine label" : item.label,
           suggestedTime: item.suggestedTime,
           childIds: item.childIds,
+          weekdays: item.weekdays,
           active: item.active,
         })),
         {
           label: "Evening walk",
           suggestedTime: "18:30",
           childIds: settings.children.map((child) => child.id),
+          weekdays: [0, 1, 2, 3, 4, 5, 6],
           active: true,
         },
       ],
@@ -292,6 +335,7 @@ describe("memory repository integration", () => {
         label: item.label,
         suggestedTime: item.suggestedTime,
         childIds: item.childIds,
+        weekdays: item.weekdays,
         active: item.active,
       })),
     });
@@ -349,6 +393,7 @@ describe("memory repository integration", () => {
         label: index === 0 ? "Newest routine label" : item.label,
         suggestedTime: item.suggestedTime,
         childIds: item.childIds,
+        weekdays: item.weekdays,
         active: item.active,
       })),
     });
@@ -386,6 +431,7 @@ describe("memory repository integration", () => {
         label: index === 0 ? "Changed after finalizing" : item.label,
         suggestedTime: item.suggestedTime,
         childIds: item.childIds,
+        weekdays: item.weekdays,
         active: item.active,
       })),
     });
@@ -431,7 +477,7 @@ describe("memory repository integration", () => {
       hardDeleteEnabled: true,
       children: settings.children.map((child) => ({ id: child.id, displayName: child.displayName, birthdate: child.birthdate })),
       caregivers: settings.caregivers.map((caregiver) => ({ id: caregiver.id, displayName: caregiver.displayName, relationship: caregiver.relationship })),
-      routineItems: settings.template.items.map((item) => ({ id: item.id, label: item.label, suggestedTime: item.suggestedTime, childIds: item.childIds, active: item.active })),
+      routineItems: settings.template.items.map((item) => ({ id: item.id, label: item.label, suggestedTime: item.suggestedTime, childIds: item.childIds, weekdays: item.weekdays, active: item.active })),
     });
     const entry = await repository.createCareEntry(context, {
       localDate: "2026-07-14",

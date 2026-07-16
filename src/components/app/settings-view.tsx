@@ -12,7 +12,13 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
-import { CAREGIVER_RELATIONSHIPS } from "@/lib/domain/constants";
+import {
+  CAREGIVER_RELATIONSHIPS,
+  EVERY_DAY,
+  ROUTINE_WEEKDAYS,
+  WEEKDAYS_ONLY,
+  WEEKENDS_ONLY,
+} from "@/lib/domain/constants";
 import { ageOnDate, localDateInTimezone } from "@/lib/domain/dates";
 import { sortRoutineItemsByTime } from "@/lib/domain/routines";
 import type { SettingsData } from "@/lib/domain/types";
@@ -42,6 +48,7 @@ type EditableRoutineItem = {
   label: string;
   suggestedTime: string;
   childIds: string[];
+  weekdays: number[];
   active: boolean;
 };
 
@@ -81,8 +88,14 @@ function editableRoutineItems(items: SettingsData["template"]["items"]): Editabl
     label: item.label,
     suggestedTime: item.suggestedTime,
     childIds: item.childIds,
+    weekdays: item.weekdays ?? EVERY_DAY,
     active: item.active,
   }));
+}
+
+function hasSameDays(selectedDays: number[], expectedDays: number[]): boolean {
+  return selectedDays.length === expectedDays.length
+    && expectedDays.every((day) => selectedDays.includes(day));
 }
 
 export function SettingsView({ data, timezones }: { data: SettingsData; timezones: string[] }) {
@@ -117,6 +130,7 @@ export function SettingsView({ data, timezones }: { data: SettingsData; timezone
           label: item.label,
           suggestedTime: item.suggestedTime,
           childIds: item.childIds,
+          weekdays: item.weekdays,
           active: item.active,
         })),
       });
@@ -252,8 +266,8 @@ export function SettingsView({ data, timezones }: { data: SettingsData; timezone
               </div>
             </div>
             <div>
-              <div className="mb-3 flex items-end justify-between"><div><p className="text-sm font-medium">Daily routine</p><p className="mt-1 text-xs text-muted-foreground">Saving changes creates template version {templateVersion + 1}; past days keep their original version.</p></div><Badge variant="outline">v{templateVersion}</Badge></div>
-              <div className="max-h-96 space-y-2 overflow-y-auto rounded-xl border p-2">
+              <div className="mb-3 flex items-end justify-between"><div><p className="text-sm font-medium">Routine schedule</p><p className="mt-1 text-xs text-muted-foreground">Choose which days each item appears. Saving creates template version {templateVersion + 1}; past days keep their original version.</p></div><Badge variant="outline">v{templateVersion}</Badge></div>
+              <div className="max-h-[32rem] space-y-2 overflow-y-auto rounded-xl border p-2">
                 {routineItems.length === 0 && <p className="px-3 py-6 text-center text-sm text-muted-foreground">No routine items yet.</p>}
                 {routineItems.map((item, index) => (
                   <div key={item.clientKey} className="grid gap-3 rounded-lg bg-muted/40 p-3 sm:grid-cols-[auto_1fr_7rem_auto] sm:items-center">
@@ -261,11 +275,58 @@ export function SettingsView({ data, timezones }: { data: SettingsData; timezone
                     <Input required value={item.label} onChange={(event) => setRoutineItems((current) => current.map((value, itemIndex) => itemIndex === index ? { ...value, label: event.target.value } : value))} aria-label="Routine label" />
                     <Input required type="time" value={item.suggestedTime} onChange={(event) => setRoutineItems((current) => sortRoutineItemsByTime(current.map((value) => value.clientKey === item.clientKey ? { ...value, suggestedTime: event.target.value } : value)))} aria-label={`Suggested time for ${item.label || "new routine item"}`} />
                     <Button type="button" variant="ghost" size="icon-sm" className="text-destructive hover:text-destructive" aria-label={`Remove ${item.label || "routine item"}`} onClick={() => setRoutineItems((current) => current.filter((value) => value.clientKey !== item.clientKey))}><Trash2 className="size-4" /></Button>
+                    <fieldset className="sm:col-start-2 sm:col-span-3">
+                      <legend className="mb-2 text-xs font-medium text-muted-foreground">Days</legend>
+                      <div className="mb-2 flex flex-wrap gap-1.5">
+                        {[
+                          { label: "Every day", days: EVERY_DAY },
+                          { label: "Weekdays", days: WEEKDAYS_ONLY },
+                          { label: "Weekends", days: WEEKENDS_ONLY },
+                        ].map((preset) => (
+                          <Button
+                            key={preset.label}
+                            type="button"
+                            size="xs"
+                            variant={hasSameDays(item.weekdays, preset.days) ? "secondary" : "outline"}
+                            aria-pressed={hasSameDays(item.weekdays, preset.days)}
+                            onClick={() => setRoutineItems((current) => current.map((value) => value.clientKey === item.clientKey ? { ...value, weekdays: [...preset.days] } : value))}
+                          >
+                            {preset.label}
+                          </Button>
+                        ))}
+                      </div>
+                      <div className="flex flex-wrap gap-1.5">
+                        {ROUTINE_WEEKDAYS.map((day) => {
+                          const selected = item.weekdays.includes(day.value);
+                          return (
+                            <Button
+                              key={day.value}
+                              type="button"
+                              size="xs"
+                              variant={selected ? "secondary" : "outline"}
+                              aria-label={`${day.label} for ${item.label || "new routine item"}`}
+                              aria-pressed={selected}
+                              disabled={selected && item.weekdays.length === 1}
+                              onClick={() => setRoutineItems((current) => current.map((value) => {
+                                if (value.clientKey !== item.clientKey) return value;
+                                if (selected && value.weekdays.length === 1) return value;
+                                const weekdays = selected
+                                  ? value.weekdays.filter((weekday) => weekday !== day.value)
+                                  : [...value.weekdays, day.value].sort((a, b) => a - b);
+                                return { ...value, weekdays };
+                              }))}
+                            >
+                              {day.shortLabel}
+                            </Button>
+                          );
+                        })}
+                      </div>
+                    </fieldset>
                     <div className="flex flex-wrap gap-2 sm:col-start-2 sm:col-span-3">{children.map((child) => { const selected = item.childIds.includes(child.id); return <Button key={child.id} type="button" size="xs" variant={selected ? "secondary" : "outline"} onClick={() => setRoutineItems((current) => current.map((value, itemIndex) => itemIndex === index ? { ...value, childIds: selected ? value.childIds.filter((id) => id !== child.id) : [...value.childIds, child.id] } : value))}>{child.displayName || "Unnamed child"}</Button>; })}</div>
                   </div>
                 ))}
               </div>
-              <Button type="button" variant="outline" size="sm" className="mt-3" onClick={() => setRoutineItems((current) => sortRoutineItemsByTime([...current, { clientKey: crypto.randomUUID(), label: "", suggestedTime: "08:00", childIds: children.map((child) => child.id), active: true }]))}><Plus className="size-4" />Add routine item</Button>
+              <Button type="button" variant="outline" size="sm" className="mt-3" onClick={() => setRoutineItems((current) => sortRoutineItemsByTime([...current, { clientKey: crypto.randomUUID(), label: "", suggestedTime: "08:00", childIds: children.map((child) => child.id), weekdays: EVERY_DAY, active: true }]))}><Plus className="size-4" />Add routine item</Button>
             </div>
             <div className="flex items-start justify-between gap-4 rounded-xl border p-4"><div><p className="flex items-center gap-2 text-sm font-medium"><LockKeyhole className="size-4" />Allow permanent deletion</p><p className="mt-1 text-xs leading-5 text-muted-foreground">Disabled by default. Purges require owner access, MFA, a reason, and typed confirmation.</p></div><Switch checked={hardDeleteEnabled} onCheckedChange={setHardDeleteEnabled} aria-label="Allow permanent deletion" /></div>
             {message && <p className="text-sm text-muted-foreground">{message}</p>}

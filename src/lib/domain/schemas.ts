@@ -140,6 +140,13 @@ export const workspaceSettingsSchema = z
         label: z.string().trim().min(2).max(100),
         suggestedTime: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/),
         childIds: z.array(z.string()),
+        weekdays: z
+          .array(z.number().int().min(0).max(6))
+          .min(1, "Choose at least one day")
+          .max(7)
+          .refine((days) => new Set(days).size === days.length, {
+            message: "Routine days must be unique",
+          }),
         active: z.boolean(),
       }),
     ),

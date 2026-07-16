@@ -27,6 +27,20 @@ export const CARE_STATUS_LABELS: Record<CareStatus, string> = {
   not_applicable: "Not applicable",
 };
 
+export const ROUTINE_WEEKDAYS = [
+  { value: 0, shortLabel: "Sun", label: "Sunday" },
+  { value: 1, shortLabel: "Mon", label: "Monday" },
+  { value: 2, shortLabel: "Tue", label: "Tuesday" },
+  { value: 3, shortLabel: "Wed", label: "Wednesday" },
+  { value: 4, shortLabel: "Thu", label: "Thursday" },
+  { value: 5, shortLabel: "Fri", label: "Friday" },
+  { value: 6, shortLabel: "Sat", label: "Saturday" },
+] as const;
+
+export const EVERY_DAY = ROUTINE_WEEKDAYS.map((day) => day.value);
+export const WEEKDAYS_ONLY = [1, 2, 3, 4, 5];
+export const WEEKENDS_ONLY = [0, 6];
+
 export const CAREGIVER_RELATIONSHIPS = [
   "Parent",
   "Mother",

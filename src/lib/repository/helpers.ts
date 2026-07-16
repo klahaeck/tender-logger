@@ -31,7 +31,7 @@ export function createNextRoutineItems(
       taskKey: current?.taskKey ?? "custom",
       label: input.label,
       childIds: input.childIds,
-      weekdays: current?.weekdays ?? [0, 1, 2, 3, 4, 5, 6],
+      weekdays: input.weekdays,
       suggestedTime: input.suggestedTime,
       sortOrder: index + 1,
       active: input.active,
