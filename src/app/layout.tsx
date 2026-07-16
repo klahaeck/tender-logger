@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
+import { GoogleAnalytics } from "@next/third-parties/google";
 
 import { AppProviders } from "@/components/providers/app-providers";
 import { AuthProvider } from "@/components/providers/auth-provider";
@@ -65,6 +66,7 @@ export default function RootLayout({
           <AppProviders>{children}</AppProviders>
         </AuthProvider>
       </body>
+      <GoogleAnalytics gaId="G-BV2C0Z5WTW" />
     </html>
   );
 }
