@@ -275,9 +275,9 @@ export function SettingsView({ data, timezones }: { data: SettingsData; timezone
                     <Input required value={item.label} onChange={(event) => setRoutineItems((current) => current.map((value, itemIndex) => itemIndex === index ? { ...value, label: event.target.value } : value))} aria-label="Routine label" />
                     <Input required type="time" value={item.suggestedTime} onChange={(event) => setRoutineItems((current) => sortRoutineItemsByTime(current.map((value) => value.clientKey === item.clientKey ? { ...value, suggestedTime: event.target.value } : value)))} aria-label={`Suggested time for ${item.label || "new routine item"}`} />
                     <Button type="button" variant="ghost" size="icon-sm" className="text-destructive hover:text-destructive" aria-label={`Remove ${item.label || "routine item"}`} onClick={() => setRoutineItems((current) => current.filter((value) => value.clientKey !== item.clientKey))}><Trash2 className="size-4" /></Button>
-                    <fieldset className="sm:col-start-2 sm:col-span-3">
-                      <legend className="mb-2 text-xs font-medium text-muted-foreground">Days</legend>
-                      <div className="mb-2 flex flex-wrap gap-1.5">
+                    <fieldset className="rounded-lg border bg-background/70 px-3 pb-3 sm:col-start-2 sm:col-span-3">
+                      <legend className="px-1 text-xs font-medium text-muted-foreground">Days</legend>
+                      <div className="mb-2 mt-2 flex flex-wrap gap-1.5">
                         {[
                           { label: "Every day", days: EVERY_DAY },
                           { label: "Weekdays", days: WEEKDAYS_ONLY },
@@ -322,7 +322,10 @@ export function SettingsView({ data, timezones }: { data: SettingsData; timezone
                         })}
                       </div>
                     </fieldset>
-                    <div className="flex flex-wrap gap-2 sm:col-start-2 sm:col-span-3">{children.map((child) => { const selected = item.childIds.includes(child.id); return <Button key={child.id} type="button" size="xs" variant={selected ? "secondary" : "outline"} onClick={() => setRoutineItems((current) => current.map((value, itemIndex) => itemIndex === index ? { ...value, childIds: selected ? value.childIds.filter((id) => id !== child.id) : [...value.childIds, child.id] } : value))}>{child.displayName || "Unnamed child"}</Button>; })}</div>
+                    <fieldset className="rounded-lg border bg-background/70 px-3 pb-3 sm:col-start-2 sm:col-span-3">
+                      <legend className="px-1 text-xs font-medium text-muted-foreground">Children</legend>
+                      <div className="mt-2 flex flex-wrap gap-2">{children.map((child) => { const selected = item.childIds.includes(child.id); return <Button key={child.id} type="button" size="xs" variant={selected ? "secondary" : "outline"} onClick={() => setRoutineItems((current) => current.map((value, itemIndex) => itemIndex === index ? { ...value, childIds: selected ? value.childIds.filter((id) => id !== child.id) : [...value.childIds, child.id] } : value))}>{child.displayName || "Unnamed child"}</Button>; })}</div>
+                    </fieldset>
                   </div>
                 ))}
               </div>
