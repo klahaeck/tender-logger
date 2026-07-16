@@ -30,6 +30,7 @@ export default function PrivacyPage() {
           <li><strong>Files and reports:</strong> images, PDFs, other supported attachments, generated reports, manifests, and checksums.</li>
           <li><strong>Activity and integrity information:</strong> server timestamps, revision history, audit events, download activity, record hashes, invitation activity, and deletion tombstones.</li>
           <li><strong>Essential technical information:</strong> authentication cookies, request information, and operational logs needed to secure, troubleshoot, and deliver the service.</li>
+          <li><strong>Analytics information:</strong> Google Analytics may collect page views, session activity, approximate location, browser and device information, referring source, and a pseudonymous client identifier stored in a first-party analytics cookie.</li>
         </ul>
       </LegalSection>
 
@@ -41,16 +42,17 @@ export default function PrivacyPage() {
           <li>store private attachments and generate requested report packages;</li>
           <li>apply owner and reviewer permissions;</li>
           <li>protect the service, investigate misuse, and maintain record integrity features;</li>
+          <li>measure website and application usage, understand navigation patterns, and improve the service;</li>
           <li>respond to support, privacy, and security requests; and</li>
           <li>comply with applicable obligations and enforce our terms.</li>
         </ul>
-        <p>We do not currently use advertising trackers or analytics trackers, and we do not sell personal information.</p>
+        <p>We use Google Analytics for the limited measurement purposes described below. We do not configure Google Analytics to collect daybook entries, child information, attachments, or report content, and we do not sell personal information.</p>
       </LegalSection>
 
       <LegalSection title="4. When information is shared">
         <p>We share information only as needed to operate the service, at your direction, or where required. Recipients may include:</p>
         <ul className="list-disc space-y-2 pl-6 marker:text-primary">
-          <li><strong>Service providers:</strong> Clerk for authentication and subscription billing, Stripe for payment processing, MongoDB Atlas for database hosting, and Vercel for application hosting, private file storage, and background workflows. These providers process information under their own contractual and security commitments.</li>
+          <li><strong>Service providers:</strong> Clerk for authentication and subscription billing, Stripe for payment processing, MongoDB Atlas for database hosting, Vercel for application hosting, private file storage, and background workflows, and Google for website and application analytics. These providers process information under their own contractual and security commitments.</li>
           <li><strong>Authorized reviewers:</strong> people an owner invites to a workspace. Reviewers receive read-only access determined by the service’s current permissions. Owners are responsible for choosing reviewers carefully and revoking access when appropriate.</li>
           <li><strong>Legal and safety recipients:</strong> authorities, advisers, or other parties when we reasonably believe disclosure is required by law, necessary to protect rights or safety, or needed to investigate fraud or abuse.</li>
           <li><strong>Business transfers:</strong> a successor or involved advisers during a merger, acquisition, financing, reorganization, or sale of assets, subject to appropriate confidentiality protections.</li>
@@ -58,7 +60,11 @@ export default function PrivacyPage() {
       </LegalSection>
 
       <LegalSection title="5. Cookies and similar technology">
-        <p>Family Daybook and Clerk use cookies and similar browser storage that are necessary to sign users in, maintain sessions, prevent abuse, and operate account features. We do not currently use advertising cookies or analytics cookies.</p>
+        <p>Family Daybook and Clerk use cookies and similar browser storage that are necessary to sign users in, maintain sessions, prevent abuse, and operate account features. We also use Google Analytics 4, provided by Google, to measure visits and usage. Google Analytics uses the Google tag and may set first-party cookies, including <code className="rounded bg-muted px-1.5 py-0.5 font-mono text-sm">_ga</code>, to distinguish pseudonymous users and sessions.</p>
+        <p>Google Analytics may receive the page or route visited, session and page-view activity, approximate location, browser and device information, referring source, and related technical information. Google states that Google Analytics 4 uses IP addresses at collection time to derive approximate location and discards them before the addresses are logged.</p>
+        <p>
+          Learn more about <a href="https://policies.google.com/technologies/partner-sites" target="_blank" rel="noreferrer" className="font-semibold text-primary underline underline-offset-4">how Google uses information from sites that use its services</a>. You can manage or delete cookies through your browser settings or use the <a href="https://tools.google.com/dlpage/gaoptout" target="_blank" rel="noreferrer" className="font-semibold text-primary underline underline-offset-4">Google Analytics opt-out browser add-on</a> to prevent Google Analytics from using data from your browser.
+        </p>
       </LegalSection>
 
       <LegalSection title="6. Information about children">
