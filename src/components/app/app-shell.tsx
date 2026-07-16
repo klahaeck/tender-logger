@@ -8,6 +8,7 @@ import {
   CircleUserRound,
   ClipboardCheck,
   Clock3,
+  CreditCard,
   FileText,
   LogOut,
   Menu,
@@ -17,7 +18,7 @@ import {
 import { SignOutButton, useClerk, UserButton } from "@clerk/nextjs";
 
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { BrandLogo } from "@/components/app/brand-logo";
 import { cn } from "@/lib/utils";
@@ -59,7 +60,13 @@ function Navigation({ onNavigate, role }: { onNavigate?: () => void; role: Membe
   );
 }
 
-function MobileAccountButton({ onOpen }: { onOpen: () => void }) {
+function MobileAccountButton({
+  onOpen,
+  role,
+}: {
+  onOpen: () => void;
+  role: Member["role"];
+}) {
   const clerk = useClerk();
 
   return (
@@ -76,7 +83,9 @@ function MobileAccountButton({ onOpen }: { onOpen: () => void }) {
       <span>
         <span className="block text-sm font-medium">Manage account</span>
         <span className="block text-xs font-normal text-muted-foreground">
-          Profile and security settings
+          {role === "owner"
+            ? "Profile, security, and billing settings"
+            : "Profile and security settings"}
         </span>
       </span>
     </Button>
@@ -116,12 +125,26 @@ export function AppShell({
             </div>
           </div>
           {process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY && (
-            <SignOutButton redirectUrl="/">
-              <Button variant="ghost" size="sm" className="mt-3 w-full justify-start text-muted-foreground">
-                <LogOut aria-hidden="true" />
-                Sign out
-              </Button>
-            </SignOutButton>
+            <div className="mt-3 space-y-1">
+              {member.role === "owner" && (
+                <Link
+                  href="/pricing"
+                  className={cn(
+                    buttonVariants({ variant: "ghost", size: "sm" }),
+                    "w-full justify-start text-muted-foreground",
+                  )}
+                >
+                  <CreditCard aria-hidden="true" />
+                  Plan &amp; billing
+                </Link>
+              )}
+              <SignOutButton redirectUrl="/">
+                <Button variant="ghost" size="sm" className="w-full justify-start text-muted-foreground">
+                  <LogOut aria-hidden="true" />
+                  Sign out
+                </Button>
+              </SignOutButton>
+            </div>
           )}
         </div>
       </aside>
@@ -145,7 +168,23 @@ export function AppShell({
                   </p>
                   {process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY ? (
                     <>
-                      <MobileAccountButton onOpen={() => setMobileNavigationOpen(false)} />
+                      <MobileAccountButton
+                        role={member.role}
+                        onOpen={() => setMobileNavigationOpen(false)}
+                      />
+                      {member.role === "owner" && (
+                        <Link
+                          href="/pricing"
+                          className={cn(
+                            buttonVariants({ variant: "ghost" }),
+                            "w-full justify-start gap-3 rounded-xl px-3 text-muted-foreground",
+                          )}
+                          onClick={() => setMobileNavigationOpen(false)}
+                        >
+                          <CreditCard className="size-5" aria-hidden="true" />
+                          Plan &amp; billing
+                        </Link>
+                      )}
                       <SignOutButton redirectUrl="/">
                         <Button
                           variant="ghost"

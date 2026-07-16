@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 
+import { privateRouteError } from "@/lib/auth/private-route-error";
 import { getRepository, getRequestContext } from "@/lib/repository";
 import { getPrivateFile } from "@/lib/storage/private-files";
 
@@ -15,7 +16,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
     await repository.recordAuditEvent(context, { actorId: context.member.id, action: "downloaded", targetType: "attachment", targetId: attachment.id });
     const safeName = attachment.originalName.replace(/["\r\n]/g, "_");
     return new NextResponse(Buffer.from(file.body), { headers: { "Content-Type": file.contentType, "Content-Disposition": `attachment; filename="${safeName}"`, "Cache-Control": "private, no-store", "X-Content-Type-Options": "nosniff" } });
-  } catch {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  } catch (error) {
+    return privateRouteError(error);
   }
 }

@@ -1,0 +1,110 @@
+import "server-only";
+
+import { clerkConfigured } from "@/lib/auth/identity";
+import type { RequestContext } from "@/lib/repository/repository";
+
+export const DEFAULT_PAID_BILLING_PLAN_SLUGS = [
+  "general",
+] as const;
+
+type BillingSubscriptionItemLike = {
+  status: string;
+  periodEnd: number | null;
+  plan: { slug: string; isDefault: boolean } | null;
+};
+
+export class SubscriptionRequiredError extends Error {
+  constructor() {
+    super("SUBSCRIPTION_REQUIRED");
+    this.name = "SubscriptionRequiredError";
+  }
+}
+
+export class BillingAccessUnavailableError extends Error {
+  constructor(options?: ErrorOptions) {
+    super("BILLING_ACCESS_UNAVAILABLE", options);
+    this.name = "BillingAccessUnavailableError";
+  }
+}
+
+export function isSubscriptionRequiredError(error: unknown): boolean {
+  return (
+    error instanceof SubscriptionRequiredError ||
+    (error instanceof Error && error.message === "SUBSCRIPTION_REQUIRED")
+  );
+}
+
+export function isBillingAccessUnavailableError(error: unknown): boolean {
+  return (
+    error instanceof BillingAccessUnavailableError ||
+    (error instanceof Error && error.message === "BILLING_ACCESS_UNAVAILABLE")
+  );
+}
+
+export function allowedBillingPlanSlugs(
+  configured = process.env.CLERK_ALLOWED_PLAN_SLUGS,
+): Set<string> {
+  const slugs = configured
+    ?.split(",")
+    .map((slug) => slug.trim())
+    .filter(Boolean);
+
+  return new Set(
+    slugs?.length ? slugs : DEFAULT_PAID_BILLING_PLAN_SLUGS,
+  );
+}
+
+export function subscriptionItemGrantsAccess(
+  item: BillingSubscriptionItemLike,
+  allowedPlanSlugs = allowedBillingPlanSlugs(),
+  now = Date.now(),
+): boolean {
+  if (
+    !item.plan ||
+    item.plan.isDefault ||
+    !allowedPlanSlugs.has(item.plan.slug)
+  ) {
+    return false;
+  }
+  if (item.status === "active") return true;
+
+  return (
+    item.status === "canceled" &&
+    item.periodEnd !== null &&
+    item.periodEnd > now
+  );
+}
+
+export function hasAllowedBillingPlan(
+  items: BillingSubscriptionItemLike[],
+  allowedPlanSlugs = allowedBillingPlanSlugs(),
+  now = Date.now(),
+): boolean {
+  return items.some((item) =>
+    subscriptionItemGrantsAccess(item, allowedPlanSlugs, now),
+  );
+}
+
+export async function assertWorkspaceBillingAccess(
+  context: RequestContext,
+): Promise<void> {
+  if (context.identity.demo || !clerkConfigured()) return;
+  if (!context.billingOwnerAuthUserId) {
+    throw new Error("BILLING_OWNER_REQUIRED");
+  }
+
+  try {
+    const { clerkClient } = await import("@clerk/nextjs/server");
+    const client = await clerkClient();
+    const subscription = await client.billing.getUserBillingSubscription(
+      context.billingOwnerAuthUserId,
+    );
+
+    if (!hasAllowedBillingPlan(subscription.subscriptionItems)) {
+      throw new SubscriptionRequiredError();
+    }
+  } catch (error) {
+    if (isSubscriptionRequiredError(error)) throw error;
+    throw new BillingAccessUnavailableError({ cause: error });
+  }
+}

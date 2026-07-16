@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { privateRouteError } from "@/lib/auth/private-route-error";
 import { getRepository, getRequestContext } from "@/lib/repository";
 
 export async function GET() {
@@ -6,7 +7,7 @@ export async function GET() {
     const repository = await getRepository();
     const context = await getRequestContext();
     return NextResponse.json(await repository.getAppointments(context), { headers: { "Cache-Control": "private, no-store" } });
-  } catch {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  } catch (error) {
+    return privateRouteError(error);
   }
 }

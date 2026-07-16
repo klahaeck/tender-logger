@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 
+import { privateRouteError } from "@/lib/auth/private-route-error";
 import { isValidLocalDate, localDateInTimezone } from "@/lib/domain/dates";
 import { getRepository, getRequestContext } from "@/lib/repository";
 
@@ -15,7 +16,7 @@ export async function GET(request: Request) {
     const date = requested ?? today;
     const data = await repository.getDashboard(context, date);
     return NextResponse.json(data, { headers: { "Cache-Control": "private, no-store" } });
-  } catch {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  } catch (error) {
+    return privateRouteError(error);
   }
 }

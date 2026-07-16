@@ -14,6 +14,13 @@ export function clerkConfigured(): boolean {
   );
 }
 
+export async function userIsSignedIn(): Promise<boolean> {
+  if (!clerkConfigured()) return false;
+
+  const { auth } = await import("@clerk/nextjs/server");
+  return Boolean((await auth()).userId);
+}
+
 export async function getIdentity(): Promise<Identity> {
   if (!clerkConfigured()) {
     return {

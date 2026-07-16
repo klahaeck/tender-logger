@@ -20,7 +20,7 @@ import { buttonVariants } from "@/components/ui/button";
 import { DaybookLink } from "@/components/marketing/daybook-link";
 import { MarketingShell } from "@/components/marketing/marketing-shell";
 import { ProductPreview } from "@/components/marketing/product-preview";
-import { clerkConfigured } from "@/lib/auth/identity";
+import { userIsSignedIn } from "@/lib/auth/identity";
 import { cn } from "@/lib/utils";
 
 export const metadata: Metadata = {
@@ -66,13 +66,6 @@ const securityPoints = [
   { icon: ShieldCheck, title: "Workspace boundaries", description: "Each account receives an isolated workspace, with membership and role checks repeated for every private request." },
   { icon: History, title: "Tamper-evident history", description: "Server timestamps, append-only revisions, and linked hashes make quiet changes easier to detect." },
 ];
-
-async function userIsSignedIn(): Promise<boolean> {
-  if (!clerkConfigured()) return false;
-
-  const { auth } = await import("@clerk/nextjs/server");
-  return Boolean((await auth()).userId);
-}
 
 export default async function MarketingHome() {
   const signedIn = await userIsSignedIn();

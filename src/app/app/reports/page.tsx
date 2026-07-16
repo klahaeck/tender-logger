@@ -1,12 +1,12 @@
 import { AppShell, PageHeading } from "@/components/app/app-shell";
 import { ReportsView } from "@/components/app/reports-view";
-import { getRepository, getRequestContext } from "@/lib/repository";
+import { getPageRequestContext, getRepository } from "@/lib/repository";
 
 export const metadata = { title: "Reports" };
 
 export default async function ReportsPage() {
   const repository = await getRepository();
-  const context = await getRequestContext();
+  const context = await getPageRequestContext();
   const [reports, settings] = await Promise.all([
     repository.getReports(context),
     repository.getSettings(context),

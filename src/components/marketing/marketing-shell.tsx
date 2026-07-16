@@ -9,6 +9,7 @@ import { cn } from "@/lib/utils";
 const navigation = [
   { href: "/#features", label: "Features" },
   { href: "/#how-it-works", label: "How it works" },
+  { href: "/pricing", label: "Pricing" },
   { href: "/#security", label: "Privacy" },
 ];
 
@@ -105,6 +106,7 @@ export function MarketingShell({
             </div>
             <nav className="grid grid-cols-2 gap-x-10 gap-y-3 text-sm" aria-label="Footer navigation">
               <Link href="/#features" className="text-muted-foreground hover:text-foreground">Features</Link>
+              <Link href="/pricing" className="text-muted-foreground hover:text-foreground">Pricing</Link>
               <SessionControl
                 signedIn={signedIn}
                 className="text-left text-muted-foreground hover:text-foreground"

@@ -29,6 +29,7 @@ export interface RequestContext {
   identity: Identity;
   workspace: Workspace;
   member: Member;
+  billingOwnerAuthUserId: string;
 }
 
 export interface RecordBundle {

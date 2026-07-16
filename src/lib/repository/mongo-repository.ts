@@ -122,7 +122,22 @@ export class MongoParentingRepository implements ParentingRepository {
       id: member.workspaceId,
     });
     if (!workspace) throw new Error("WORKSPACE_NOT_FOUND");
-    return toPlainData({ identity, workspace, member });
+    const owner =
+      member.id === workspace.ownerId
+        ? member
+        : await members.findOne({
+            id: workspace.ownerId,
+            workspaceId: workspace.id,
+            role: "owner",
+            status: "active",
+          });
+    if (!owner?.authUserId) throw new Error("BILLING_OWNER_REQUIRED");
+    return toPlainData({
+      identity,
+      workspace,
+      member,
+      billingOwnerAuthUserId: owner.authUserId,
+    });
   }
 
   async getDashboard(context: RequestContext, date: string) {

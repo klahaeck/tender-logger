@@ -72,8 +72,15 @@ Hard purge is disabled by default. When enabled, it removes active record conten
 - Validated Server Actions for mutations and authenticated GET Route Handlers for reads
 - Native MongoDB Node.js driver with Stable API and transactional record/revision/audit writes
 - Clerk identity with application roles stored in MongoDB
+- Clerk Billing with owner-based access for the paid subscriber `general` Plan
 - Per-account MongoDB workspaces with repository-level tenant isolation
 - Vercel Private Blob for original files and report artifacts
 - React PDF, JSZip, and Vercel Workflow SDK for evidence packages
 
 The repository adapter uses MongoDB when `MONGODB_URI` is configured. The development-only memory adapter is available only when Clerk is not configured, preventing authenticated users from ever sharing demo state.
+
+## Billing access
+
+The public `/pricing` page renders Clerk's user Pricing Table. Private workspace requests verify the workspace owner's Clerk Billing Subscription on the server, including Route Handlers and Server Actions. The default configuration accepts only the paid subscriber Plan (`general`); the hidden default Free Plan (`free_user`) does not grant application access. Override the paid-plan allowlist with the comma-separated `CLERK_ALLOWED_PLAN_SLUGS` environment variable if Plan slugs differ between Clerk instances.
+
+Invited reviewers inherit the workspace owner's billing access. A reviewer is never required to buy a separate Plan, and the server resolves the owner before checking Clerk so this rule applies to pages, API reads, downloads, and mutations.

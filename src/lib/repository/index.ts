@@ -1,5 +1,9 @@
 import "server-only";
 
+import {
+  assertWorkspaceBillingAccess,
+  isSubscriptionRequiredError,
+} from "@/lib/auth/billing";
 import { clerkConfigured, getIdentity } from "@/lib/auth/identity";
 import { mongoConfigured } from "@/lib/db/mongodb";
 import type { ParentingRepository, RequestContext } from "./repository";
@@ -22,7 +26,21 @@ export async function getRepository(): Promise<ParentingRepository> {
 export async function getRequestContext(): Promise<RequestContext> {
   const identity = await getIdentity();
   const repo = await getRepository();
-  return repo.resolveContext(identity);
+  const context = await repo.resolveContext(identity);
+  await assertWorkspaceBillingAccess(context);
+  return context;
+}
+
+export async function getPageRequestContext(): Promise<RequestContext> {
+  try {
+    return await getRequestContext();
+  } catch (error) {
+    if (isSubscriptionRequiredError(error)) {
+      const { redirect } = await import("next/navigation");
+      redirect("/pricing?reason=subscription-required");
+    }
+    throw error;
+  }
 }
 
 export function resetRepositoryForTests(): void {

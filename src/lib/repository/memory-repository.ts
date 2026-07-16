@@ -96,7 +96,16 @@ export class MemoryParentingRepository implements ParentingRepository {
             item.email.toLowerCase() === identity.email.toLowerCase()),
       ) ?? data.members.find((item) => item.role === "owner" && item.status === "active");
     if (!member) throw new Error("FORBIDDEN");
-    return { identity, workspace: data.workspace, member };
+    const owner = data.members.find(
+      (item) => item.id === data.workspace.ownerId && item.status === "active",
+    );
+    if (!owner?.authUserId) throw new Error("BILLING_OWNER_REQUIRED");
+    return {
+      identity,
+      workspace: data.workspace,
+      member,
+      billingOwnerAuthUserId: owner.authUserId,
+    };
   }
 
   async getDashboard(context: RequestContext, date: string) {

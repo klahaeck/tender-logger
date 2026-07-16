@@ -27,6 +27,15 @@ test("public pages have no serious accessibility violations", async ({ page }) =
   ).toEqual([]);
 });
 
+test("public pricing explains owner billing and reviewer coverage", async ({ page }) => {
+  await page.goto("/pricing");
+  await expect(
+    page.getByRole("heading", { name: "Choose the plan for your family daybook." }),
+  ).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Reviewers are included" })).toBeVisible();
+  await expect(page.getByText("Billing preview unavailable")).toBeVisible();
+});
+
 test("public legal pages are available with visible draft placeholders", async ({ page }) => {
   await page.goto("/privacy");
   await expect(page.getByRole("heading", { name: "Privacy policy" })).toBeVisible();
@@ -50,6 +59,7 @@ test("public routes expose the intended crawler metadata", async ({ page, reques
 
   const sitemap = await (await request.get("/sitemap.xml")).text();
   expect(sitemap).toContain("<loc>http://127.0.0.1:3100/</loc>");
+  expect(sitemap).toContain("<loc>http://127.0.0.1:3100/pricing</loc>");
   expect(sitemap).toContain("<loc>http://127.0.0.1:3100/privacy</loc>");
   expect(sitemap).toContain("<loc>http://127.0.0.1:3100/terms</loc>");
   expect(sitemap).not.toContain("/app</loc>");

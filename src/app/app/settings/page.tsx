@@ -2,13 +2,13 @@ import { notFound } from "next/navigation";
 
 import { AppShell, PageHeading } from "@/components/app/app-shell";
 import { SettingsView } from "@/components/app/settings-view";
-import { getRepository, getRequestContext } from "@/lib/repository";
+import { getPageRequestContext, getRepository } from "@/lib/repository";
 
 export const metadata = { title: "Settings" };
 
 export default async function SettingsPage() {
   const repository = await getRepository();
-  const context = await getRequestContext();
+  const context = await getPageRequestContext();
   if (context.member.role !== "owner") notFound();
   const data = await repository.getSettings(context);
   const timezones = [

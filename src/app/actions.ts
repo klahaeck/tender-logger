@@ -35,6 +35,12 @@ function fail(error: unknown): ActionResult<never> {
   const safe: Record<string, string> = {
     FORBIDDEN: "You do not have permission to perform this action.",
     UNAUTHENTICATED: "Please sign in to continue.",
+    SUBSCRIPTION_REQUIRED:
+      "A paid Family Daybook plan is required to use this workspace.",
+    BILLING_ACCESS_UNAVAILABLE:
+      "Billing access could not be verified. Please try again.",
+    BILLING_OWNER_REQUIRED:
+      "The workspace owner must finish setting up their account before access can be verified.",
     MONGODB_REQUIRED:
       "MongoDB must be configured before authenticated accounts can use the app.",
     NOT_FOUND: "The requested record was not found.",

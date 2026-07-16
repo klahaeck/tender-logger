@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 
+import { privateRouteError } from "@/lib/auth/private-route-error";
 import { getRepository, getRequestContext } from "@/lib/repository";
 import { getPrivateFile } from "@/lib/storage/private-files";
 
@@ -24,7 +25,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
         "X-Content-Type-Options": "nosniff",
       },
     });
-  } catch {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  } catch (error) {
+    return privateRouteError(error);
   }
 }

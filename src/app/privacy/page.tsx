@@ -24,7 +24,7 @@ export default function PrivacyPage() {
       <LegalSection title="2. Information we collect">
         <p>We collect information that you provide, information created while you use the service, and limited technical information needed to operate it.</p>
         <ul className="list-disc space-y-2 pl-6 marker:text-primary">
-          <li><strong>Account information:</strong> name, email address, authentication identifiers, account status, and security settings supplied through our authentication provider.</li>
+          <li><strong>Account and subscription information:</strong> name, email address, authentication identifiers, account status, security settings, Plan, Subscription status, statements, and payment history supplied through Clerk. Payment card details are handled by Clerk and its payment processor and are not stored in Family Daybook’s application database.</li>
           <li><strong>Family and workspace information:</strong> workspace name, timezone, adult caregiver labels, reviewer names and emails, child display names or labels, and birthdates entered by an adult account holder.</li>
           <li><strong>Daybook content:</strong> routines, caregiving entries, appointment information, factual incident notes, timestamps, people present, observations, outcomes, corrections, and other details you choose to record.</li>
           <li><strong>Files and reports:</strong> images, PDFs, other supported attachments, generated reports, manifests, and checksums.</li>
@@ -50,7 +50,7 @@ export default function PrivacyPage() {
       <LegalSection title="4. When information is shared">
         <p>We share information only as needed to operate the service, at your direction, or where required. Recipients may include:</p>
         <ul className="list-disc space-y-2 pl-6 marker:text-primary">
-          <li><strong>Service providers:</strong> Clerk for authentication, MongoDB Atlas for database hosting, and Vercel for application hosting, private file storage, and background workflows. These providers process information on our behalf under their own contractual and security commitments.</li>
+          <li><strong>Service providers:</strong> Clerk for authentication and subscription billing, Stripe for payment processing, MongoDB Atlas for database hosting, and Vercel for application hosting, private file storage, and background workflows. These providers process information under their own contractual and security commitments.</li>
           <li><strong>Authorized reviewers:</strong> people an owner invites to a workspace. Reviewers receive read-only access determined by the service’s current permissions. Owners are responsible for choosing reviewers carefully and revoking access when appropriate.</li>
           <li><strong>Legal and safety recipients:</strong> authorities, advisers, or other parties when we reasonably believe disclosure is required by law, necessary to protect rights or safety, or needed to investigate fraud or abuse.</li>
           <li><strong>Business transfers:</strong> a successor or involved advisers during a merger, acquisition, financing, reorganization, or sale of assets, subject to appropriate confidentiality protections.</li>

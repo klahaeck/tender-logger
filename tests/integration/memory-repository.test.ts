@@ -58,6 +58,7 @@ describe("memory repository integration", () => {
       authUserId: "reviewer_user",
       email: reviewer.email,
     });
+    expect(reviewerContext.billingOwnerAuthUserId).toBe(owner.identity.authUserId);
     await expect(
       repository.createIncident(reviewerContext, {
         category: "other",

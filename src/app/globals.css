@@ -137,3 +137,36 @@
     @apply font-heading;
   }
 }
+
+/*
+ * iOS WebKit miscalculates 100%-wide date/time controls when the input itself
+ * has inline padding. Keep the native picker constrained and move that spacing
+ * to WebKit's inner value instead.
+ * https://bugs.webkit.org/show_bug.cgi?id=301648
+ */
+@supports (-webkit-touch-callout: none) {
+  input:is(
+    [type="date"],
+    [type="datetime-local"],
+    [type="month"],
+    [type="time"],
+    [type="week"]
+  ) {
+    inline-size: 100%;
+    min-inline-size: 0;
+    max-inline-size: 100%;
+    padding-inline: 0;
+  }
+
+  input:is(
+    [type="date"],
+    [type="datetime-local"],
+    [type="month"],
+    [type="time"],
+    [type="week"]
+  )::-webkit-date-and-time-value {
+    min-inline-size: 0;
+    padding-inline: 0.625rem;
+    text-align: start;
+  }
+}

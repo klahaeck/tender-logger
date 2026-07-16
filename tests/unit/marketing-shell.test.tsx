@@ -13,6 +13,7 @@ describe("MarketingShell", () => {
     const markup = renderToStaticMarkup(<MarketingShell>Content</MarketingShell>);
 
     expect(markup.match(/Sign in/g)).toHaveLength(3);
+    expect(markup.match(/href="\/pricing"/g)).toHaveLength(3);
     expect(markup).not.toContain("Sign out");
   });
 
