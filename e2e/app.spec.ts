@@ -122,6 +122,17 @@ test("mobile public and dashboard content stays within the viewport", async ({ p
   }
 });
 
+test("mobile navigation exposes account controls", async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== "mobile", "This regression targets the mobile navigation drawer.");
+
+  await page.goto("/app");
+  await page.getByRole("button", { name: "Open navigation" }).click();
+
+  await expect(page.getByRole("heading", { name: "Navigation" })).toBeVisible();
+  await expect(page.getByText("Account", { exact: true })).toBeVisible();
+  await expect(page.getByText("Demo account", { exact: true })).toBeVisible();
+});
+
 test("primary pages have no serious accessibility violations", async ({ page }) => {
   await page.goto("/app");
   const results = await new AxeBuilder({ page }).disableRules(["color-contrast"]).analyze();

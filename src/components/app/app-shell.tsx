@@ -1,9 +1,11 @@
 "use client";
 
+import { useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
   CalendarDays,
+  CircleUserRound,
   ClipboardCheck,
   Clock3,
   FileText,
@@ -11,7 +13,7 @@ import {
   Settings,
   ShieldAlert,
 } from "lucide-react";
-import { UserButton } from "@clerk/nextjs";
+import { useClerk, UserButton } from "@clerk/nextjs";
 
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
@@ -56,6 +58,30 @@ function Navigation({ onNavigate, role }: { onNavigate?: () => void; role: Membe
   );
 }
 
+function MobileAccountButton({ onOpen }: { onOpen: () => void }) {
+  const clerk = useClerk();
+
+  return (
+    <Button
+      type="button"
+      variant="ghost"
+      className="h-auto w-full justify-start gap-3 rounded-xl px-3 py-2.5 text-left"
+      onClick={() => {
+        onOpen();
+        clerk.openUserProfile();
+      }}
+    >
+      <CircleUserRound className="size-5" aria-hidden="true" />
+      <span>
+        <span className="block text-sm font-medium">Manage account</span>
+        <span className="block text-xs font-normal text-muted-foreground">
+          Profile and security settings
+        </span>
+      </span>
+    </Button>
+  );
+}
+
 export function AppShell({
   children,
   workspace,
@@ -65,6 +91,8 @@ export function AppShell({
   workspace: Workspace;
   member: Member;
 }) {
+  const [mobileNavigationOpen, setMobileNavigationOpen] = useState(false);
+
   return (
     <div className="min-h-screen w-full min-w-0 bg-[radial-gradient(circle_at_top_left,var(--surface-glow),transparent_36rem)]">
       <aside className="fixed inset-y-0 left-0 z-30 hidden w-64 border-r bg-background/92 px-4 py-5 backdrop-blur-xl lg:flex lg:flex-col">
@@ -95,13 +123,31 @@ export function AppShell({
             <Link href="/app" aria-label="Family Daybook app home">
               <BrandLogo decorative className="w-[164px]" />
             </Link>
-            <Sheet>
+            <Sheet open={mobileNavigationOpen} onOpenChange={setMobileNavigationOpen}>
               <SheetTrigger render={<Button variant="outline" size="icon" aria-label="Open navigation" />}>
                 <Menu className="size-4" />
               </SheetTrigger>
               <SheetContent side="right" className="w-72 p-5">
                 <SheetTitle className="mb-6">Navigation</SheetTitle>
-                <Navigation role={member.role} />
+                <Navigation role={member.role} onNavigate={() => setMobileNavigationOpen(false)} />
+                <div className="mt-auto border-t pt-4">
+                  <p className="mb-2 px-3 text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+                    Account
+                  </p>
+                  {process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY ? (
+                    <MobileAccountButton onOpen={() => setMobileNavigationOpen(false)} />
+                  ) : (
+                    <div className="flex items-center gap-3 rounded-xl px-3 py-2.5">
+                      <Avatar className="size-9">
+                        <AvatarFallback className="bg-primary/10 text-primary">DO</AvatarFallback>
+                      </Avatar>
+                      <div className="min-w-0">
+                        <p className="truncate text-sm font-medium">{member.displayName}</p>
+                        <p className="truncate text-xs text-muted-foreground">Demo account</p>
+                      </div>
+                    </div>
+                  )}
+                </div>
               </SheetContent>
             </Sheet>
           </div>
