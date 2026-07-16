@@ -20,16 +20,16 @@ export function MultiCheck({
 }) {
   const groupId = useId();
   return (
-    <fieldset className="space-y-2">
+    <fieldset className="min-w-0 max-w-full space-y-2">
       <legend className="text-sm font-medium">{label}</legend>
-      <div className="grid gap-2 sm:grid-cols-2">
+      <div className="grid min-w-0 max-w-full gap-2 sm:grid-cols-2">
         {values.map((value) => {
           const checked = selected.includes(value.id);
           return (
             <label
               key={value.id}
               className={cn(
-                "flex min-h-11 cursor-pointer items-center gap-3 rounded-xl border px-3 py-2 transition",
+                "flex min-h-11 min-w-0 max-w-full cursor-pointer items-center gap-3 rounded-xl border px-3 py-2 transition",
                 checked ? "border-primary bg-primary/5" : "bg-background hover:bg-muted/50",
               )}
             >
@@ -44,7 +44,7 @@ export function MultiCheck({
                   )
                 }
               />
-              <span>
+              <span className="min-w-0 [overflow-wrap:anywhere]">
                 <span className="block text-sm font-medium">{value.displayName}</span>
                 {value.secondary && <span className="block text-xs text-muted-foreground">{value.secondary}</span>}
               </span>
@@ -58,7 +58,7 @@ export function MultiCheck({
 
 export function FieldError({ errors }: { errors?: string[] }) {
   if (!errors?.length) return null;
-  return <p className="text-xs font-medium text-destructive">{errors[0]}</p>;
+  return <p className="max-w-full text-xs font-medium text-destructive [overflow-wrap:anywhere]">{errors[0]}</p>;
 }
 
 export function AttachmentPicker({
@@ -70,14 +70,16 @@ export function AttachmentPicker({
 }) {
   const id = useId();
   return (
-    <div className="space-y-2">
+    <div className="min-w-0 max-w-full space-y-2">
       <Label htmlFor={id}>Supporting files (optional)</Label>
       <label
         htmlFor={id}
-        className="flex min-h-20 cursor-pointer items-center justify-center gap-2 rounded-xl border border-dashed bg-muted/30 px-4 text-center text-sm text-muted-foreground hover:bg-muted/60"
+        className="flex min-h-20 w-full min-w-0 max-w-full cursor-pointer items-center justify-center gap-2 rounded-xl border border-dashed bg-muted/30 px-4 text-center text-sm text-muted-foreground hover:bg-muted/60"
       >
-        <Paperclip className="size-4" />
-        {files.length ? `${files.length} file${files.length === 1 ? "" : "s"} selected` : "Add JPEG, PNG, HEIC, or PDF · up to 15 MB each"}
+        <Paperclip className="size-4 shrink-0" />
+        <span className="min-w-0 [overflow-wrap:anywhere]">
+          {files.length ? `${files.length} file${files.length === 1 ? "" : "s"} selected` : "Add JPEG, PNG, HEIC, or PDF · up to 15 MB each"}
+        </span>
       </label>
       <input
         id={id}

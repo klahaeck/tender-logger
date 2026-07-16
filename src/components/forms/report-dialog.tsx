@@ -49,7 +49,7 @@ export function ReportDialog({ childOptions, timezone }: { childOptions: Child[]
         <form action={(data) => mutation.mutate(data)}>
           <DialogHeader><DialogTitle>Create evidence package</DialogTitle><DialogDescription>Generate an immutable PDF snapshot plus original files, a manifest, and checksums.</DialogDescription></DialogHeader>
           <div className="my-5 space-y-5">
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid gap-4 sm:grid-cols-2">
               <div className="space-y-2"><Label htmlFor="from">From</Label><Input id="from" name="from" type="date" required defaultValue={localDateInTimezone(oneMonthAgo, timezone)} /></div>
               <div className="space-y-2"><Label htmlFor="to">Through</Label><Input id="to" name="to" type="date" required defaultValue={today} /></div>
             </div>
