@@ -198,7 +198,7 @@ export function SettingsView({ data, timezones }: { data: SettingsData; timezone
               </div>
               <div className="space-y-3">
                 {children.map((child, index) => (
-                  <div key={child.id} className="grid gap-3 rounded-xl border p-3 sm:grid-cols-[1fr_11rem_auto] sm:items-start">
+                  <div key={child.id} className="relative grid gap-3 rounded-xl border p-3 pr-12 sm:grid-cols-[minmax(0,1fr)_11rem] sm:items-start">
                     <div className="space-y-2">
                       <Label htmlFor={`child-name-${child.id}`}>Display name</Label>
                       <Input
@@ -228,7 +228,7 @@ export function SettingsView({ data, timezones }: { data: SettingsData; timezone
                       type="button"
                       variant="ghost"
                       size="icon-sm"
-                      className="text-destructive hover:text-destructive"
+                      className="absolute right-3 top-3 text-destructive hover:text-destructive"
                       aria-label={`Remove child ${child.displayName || index + 1}`}
                       disabled={children.length === 1}
                       onClick={() => removeChild(child.id)}
@@ -243,7 +243,7 @@ export function SettingsView({ data, timezones }: { data: SettingsData; timezone
               <div className="mb-3 flex items-center justify-between gap-3"><p className="text-sm font-medium">Caregivers</p><Button type="button" variant="outline" size="sm" onClick={() => setCaregivers((current) => [...current, { clientKey: crypto.randomUUID(), displayName: "", relationship: "" }])}><Plus className="size-4" />Add caregiver</Button></div>
               <div className="space-y-3">
                 {caregivers.map((caregiver, index) => (
-                  <div key={caregiver.clientKey} className="grid gap-3 sm:grid-cols-[1fr_1fr_auto] sm:items-start">
+                  <div key={caregiver.clientKey} className="relative grid gap-3 pr-12 sm:grid-cols-2 sm:items-start">
                     <div className="grid gap-2"><Label htmlFor={`caregiver-${caregiver.clientKey}`}>Name</Label><Input id={`caregiver-${caregiver.clientKey}`} name={`caregiver-${caregiver.clientKey}`} value={caregiver.displayName} onChange={(event) => setCaregivers((current) => current.map((value, caregiverIndex) => caregiverIndex === index ? { ...value, displayName: event.target.value } : value))} required /></div>
                     <div className="grid gap-2">
                       <Label htmlFor={`relationship-${caregiver.clientKey}`}>Relationship</Label>
@@ -260,7 +260,7 @@ export function SettingsView({ data, timezones }: { data: SettingsData; timezone
                         </SelectContent>
                       </Select>
                     </div>
-                    {!caregiver.id && <Button type="button" variant="ghost" size="icon" className="text-destructive hover:text-destructive sm:self-end" aria-label={`Remove caregiver ${index + 1}`} onClick={() => setCaregivers((current) => current.filter((value) => value.clientKey !== caregiver.clientKey))}><Trash2 className="size-4" /></Button>}
+                    {!caregiver.id && <Button type="button" variant="ghost" size="icon" className="absolute right-0 top-0 text-destructive hover:text-destructive" aria-label={`Remove caregiver ${index + 1}`} onClick={() => setCaregivers((current) => current.filter((value) => value.clientKey !== caregiver.clientKey))}><Trash2 className="size-4" /></Button>}
                   </div>
                 ))}
               </div>
@@ -270,12 +270,12 @@ export function SettingsView({ data, timezones }: { data: SettingsData; timezone
               <div className="max-h-[32rem] space-y-2 overflow-y-auto rounded-xl border p-2">
                 {routineItems.length === 0 && <p className="px-3 py-6 text-center text-sm text-muted-foreground">No routine items yet.</p>}
                 {routineItems.map((item, index) => (
-                  <div key={item.clientKey} className="grid gap-3 rounded-lg bg-muted/40 p-3 sm:grid-cols-[auto_1fr_7rem_auto] sm:items-center">
+                  <div key={item.clientKey} className="relative grid gap-3 rounded-lg bg-muted/40 p-3 pr-12 sm:grid-cols-[auto_minmax(0,1fr)_7rem] sm:items-center">
                     <Switch checked={item.active} onCheckedChange={(checked) => setRoutineItems((current) => current.map((value, itemIndex) => itemIndex === index ? { ...value, active: checked } : value))} aria-label={`Enable ${item.label}`} />
                     <Input required value={item.label} onChange={(event) => setRoutineItems((current) => current.map((value, itemIndex) => itemIndex === index ? { ...value, label: event.target.value } : value))} aria-label="Routine label" />
                     <Input required type="time" value={item.suggestedTime} onChange={(event) => setRoutineItems((current) => sortRoutineItemsByTime(current.map((value) => value.clientKey === item.clientKey ? { ...value, suggestedTime: event.target.value } : value)))} aria-label={`Suggested time for ${item.label || "new routine item"}`} />
-                    <Button type="button" variant="ghost" size="icon-sm" className="text-destructive hover:text-destructive" aria-label={`Remove ${item.label || "routine item"}`} onClick={() => setRoutineItems((current) => current.filter((value) => value.clientKey !== item.clientKey))}><Trash2 className="size-4" /></Button>
-                    <fieldset className="rounded-lg border bg-background/70 px-3 pb-3 sm:col-start-2 sm:col-span-3">
+                    <Button type="button" variant="ghost" size="icon-sm" className="absolute right-3 top-3 text-destructive hover:text-destructive" aria-label={`Remove ${item.label || "routine item"}`} onClick={() => setRoutineItems((current) => current.filter((value) => value.clientKey !== item.clientKey))}><Trash2 className="size-4" /></Button>
+                    <fieldset className="rounded-lg border bg-background/70 px-3 pb-3 sm:col-start-2 sm:col-span-2">
                       <legend className="px-1 text-xs font-medium text-muted-foreground">Days</legend>
                       <div className="mb-2 mt-2 flex flex-wrap gap-1.5">
                         {[
@@ -322,7 +322,7 @@ export function SettingsView({ data, timezones }: { data: SettingsData; timezone
                         })}
                       </div>
                     </fieldset>
-                    <fieldset className="rounded-lg border bg-background/70 px-3 pb-3 sm:col-start-2 sm:col-span-3">
+                    <fieldset className="rounded-lg border bg-background/70 px-3 pb-3 sm:col-start-2 sm:col-span-2">
                       <legend className="px-1 text-xs font-medium text-muted-foreground">Children</legend>
                       <div className="mt-2 flex flex-wrap gap-2">{children.map((child) => { const selected = item.childIds.includes(child.id); return <Button key={child.id} type="button" size="xs" variant={selected ? "secondary" : "outline"} onClick={() => setRoutineItems((current) => current.map((value, itemIndex) => itemIndex === index ? { ...value, childIds: selected ? value.childIds.filter((id) => id !== child.id) : [...value.childIds, child.id] } : value))}>{child.displayName || "Unnamed child"}</Button>; })}</div>
                     </fieldset>
