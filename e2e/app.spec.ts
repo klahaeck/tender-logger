@@ -5,7 +5,12 @@ test("public homepage presents the Family Daybook brochure", async ({ page }) =>
   await page.goto("/");
   await expect(page.getByRole("heading", { name: "A calmer way to keep the days that matter clear." })).toBeVisible();
   await expect(page.locator('[aria-label="Example Family Daybook dashboard"]')).toBeVisible();
-  await expect(page.getByRole("link", { name: "Start your daybook" }).first()).toHaveAttribute("href", "/sign-up");
+  const startLinks = page.getByRole("link", { name: "Start your daybook" });
+  await expect(startLinks).toHaveCount(3);
+  for (const link of await startLinks.all()) {
+    await expect(link).toHaveAttribute("href", "/sign-up");
+  }
+  await expect(page.getByRole("link", { name: "View your daybook" })).toHaveCount(0);
   await expect(page.getByRole("link", { name: "Sign in" }).first()).toHaveAttribute("href", "/sign-in");
   await expect(page.getByRole("link", { name: "Privacy", exact: true }).last()).toHaveAttribute("href", "/privacy");
   await expect(page.getByRole("link", { name: "Terms of use" })).toHaveAttribute("href", "/terms");

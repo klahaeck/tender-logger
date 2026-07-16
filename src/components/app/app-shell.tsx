@@ -9,11 +9,12 @@ import {
   ClipboardCheck,
   Clock3,
   FileText,
+  LogOut,
   Menu,
   Settings,
   ShieldAlert,
 } from "lucide-react";
-import { useClerk, UserButton } from "@clerk/nextjs";
+import { SignOutButton, useClerk, UserButton } from "@clerk/nextjs";
 
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
@@ -114,6 +115,14 @@ export function AppShell({
               <p className="truncate text-xs capitalize text-muted-foreground">{member.role}</p>
             </div>
           </div>
+          {process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY && (
+            <SignOutButton redirectUrl="/">
+              <Button variant="ghost" size="sm" className="mt-3 w-full justify-start text-muted-foreground">
+                <LogOut aria-hidden="true" />
+                Sign out
+              </Button>
+            </SignOutButton>
+          )}
         </div>
       </aside>
 
@@ -135,7 +144,19 @@ export function AppShell({
                     Account
                   </p>
                   {process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY ? (
-                    <MobileAccountButton onOpen={() => setMobileNavigationOpen(false)} />
+                    <>
+                      <MobileAccountButton onOpen={() => setMobileNavigationOpen(false)} />
+                      <SignOutButton redirectUrl="/">
+                        <Button
+                          variant="ghost"
+                          className="w-full justify-start gap-3 rounded-xl px-3 text-muted-foreground"
+                          onClick={() => setMobileNavigationOpen(false)}
+                        >
+                          <LogOut className="size-5" aria-hidden="true" />
+                          Sign out
+                        </Button>
+                      </SignOutButton>
+                    </>
                   ) : (
                     <div className="flex items-center gap-3 rounded-xl px-3 py-2.5">
                       <Avatar className="size-9">

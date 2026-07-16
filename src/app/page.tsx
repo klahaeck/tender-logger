@@ -17,8 +17,10 @@ import {
 } from "lucide-react";
 
 import { buttonVariants } from "@/components/ui/button";
+import { DaybookLink } from "@/components/marketing/daybook-link";
 import { MarketingShell } from "@/components/marketing/marketing-shell";
 import { ProductPreview } from "@/components/marketing/product-preview";
+import { clerkConfigured } from "@/lib/auth/identity";
 import { cn } from "@/lib/utils";
 
 export const metadata: Metadata = {
@@ -65,9 +67,18 @@ const securityPoints = [
   { icon: History, title: "Tamper-evident history", description: "Server timestamps, append-only revisions, and linked hashes make quiet changes easier to detect." },
 ];
 
-export default function MarketingHome() {
+async function userIsSignedIn(): Promise<boolean> {
+  if (!clerkConfigured()) return false;
+
+  const { auth } = await import("@clerk/nextjs/server");
+  return Boolean((await auth()).userId);
+}
+
+export default async function MarketingHome() {
+  const signedIn = await userIsSignedIn();
+
   return (
-    <MarketingShell>
+    <MarketingShell signedIn={signedIn}>
       <main>
         <section className="relative isolate overflow-hidden">
           <div className="absolute inset-0 -z-20 bg-[linear-gradient(180deg,#f8fbf9_0%,#f1f7f2_62%,var(--background)_100%)]" />
@@ -86,10 +97,7 @@ export default function MarketingHome() {
                 Family Daybook brings caregiving, appointments, notes, and important moments into one private, organized timeline—so details stay factual and easy to find.
               </p>
               <div className="mt-9 flex flex-col gap-3 sm:flex-row">
-                <Link href="/sign-up" className={cn(buttonVariants({ size: "lg" }), "h-12 px-6 text-base shadow-lg shadow-primary/15")}>
-                  Start your daybook
-                  <ArrowRight className="size-4" aria-hidden="true" />
-                </Link>
+                <DaybookLink signedIn={signedIn} className="h-12 px-6 text-base shadow-lg shadow-primary/15" />
                 <Link href="/#how-it-works" className={cn(buttonVariants({ variant: "outline", size: "lg" }), "h-12 bg-white/70 px-6 text-base")}>
                   See how it works
                 </Link>
@@ -192,10 +200,7 @@ export default function MarketingHome() {
             <p className="text-xs font-bold uppercase tracking-[0.18em] text-primary">Begin with today</p>
             <h2 className="mx-auto mt-4 max-w-3xl text-balance text-4xl font-semibold tracking-tight sm:text-5xl">A clear family record can start with one ordinary day.</h2>
             <p className="mx-auto mt-5 max-w-2xl text-lg leading-8 text-muted-foreground">Create your private workspace and give the details that matter a calmer place to live.</p>
-            <Link href="/sign-up" className={cn(buttonVariants({ size: "lg" }), "mt-8 h-12 px-6 text-base shadow-lg shadow-primary/15")}>
-              Start your daybook
-              <ArrowRight className="size-4" aria-hidden="true" />
-            </Link>
+            <DaybookLink signedIn={signedIn} className="mt-8 h-12 px-6 text-base shadow-lg shadow-primary/15" />
           </div>
         </section>
       </main>

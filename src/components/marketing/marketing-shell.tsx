@@ -1,7 +1,8 @@
 import Link from "next/link";
-import { ArrowRight } from "lucide-react";
+import { SignOutButton } from "@clerk/nextjs";
 
 import { BrandLogo } from "@/components/app/brand-logo";
+import { DaybookLink } from "@/components/marketing/daybook-link";
 import { buttonVariants } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
@@ -11,7 +12,37 @@ const navigation = [
   { href: "/#security", label: "Privacy" },
 ];
 
-export function MarketingShell({ children }: { children: React.ReactNode }) {
+function SessionControl({
+  signedIn,
+  className,
+}: {
+  signedIn: boolean;
+  className: string;
+}) {
+  if (!signedIn) {
+    return (
+      <Link href="/sign-in" className={className}>
+        Sign in
+      </Link>
+    );
+  }
+
+  return (
+    <SignOutButton redirectUrl="/">
+      <button type="button" className={className}>
+        Sign out
+      </button>
+    </SignOutButton>
+  );
+}
+
+export function MarketingShell({
+  children,
+  signedIn = false,
+}: {
+  children: React.ReactNode;
+  signedIn?: boolean;
+}) {
   return (
     <div className="min-h-screen overflow-x-hidden bg-background">
       <header className="sticky top-0 z-50 border-b border-border/70 bg-background/90 backdrop-blur-xl">
@@ -33,19 +64,11 @@ export function MarketingShell({ children }: { children: React.ReactNode }) {
           </nav>
 
           <div className="flex items-center gap-2">
-            <Link
-              href="/sign-in"
+            <SessionControl
+              signedIn={signedIn}
               className={cn(buttonVariants({ variant: "ghost", size: "lg" }), "hidden sm:inline-flex")}
-            >
-              Sign in
-            </Link>
-            <Link
-              href="/sign-up"
-              className={cn(buttonVariants({ size: "lg" }), "h-10 px-4 shadow-sm sm:px-5")}
-            >
-              Start your daybook
-              <ArrowRight className="size-4" aria-hidden="true" />
-            </Link>
+            />
+            <DaybookLink signedIn={signedIn} className="h-10 px-4 shadow-sm sm:px-5" />
           </div>
         </div>
 
@@ -62,12 +85,10 @@ export function MarketingShell({ children }: { children: React.ReactNode }) {
               {item.label}
             </Link>
           ))}
-          <Link
-            href="/sign-in"
+          <SessionControl
+            signedIn={signedIn}
             className="shrink-0 text-xs font-semibold text-muted-foreground transition-colors hover:text-foreground sm:hidden"
-          >
-            Sign in
-          </Link>
+          />
         </nav>
       </header>
 
@@ -84,7 +105,10 @@ export function MarketingShell({ children }: { children: React.ReactNode }) {
             </div>
             <nav className="grid grid-cols-2 gap-x-10 gap-y-3 text-sm" aria-label="Footer navigation">
               <Link href="/#features" className="text-muted-foreground hover:text-foreground">Features</Link>
-              <Link href="/sign-in" className="text-muted-foreground hover:text-foreground">Sign in</Link>
+              <SessionControl
+                signedIn={signedIn}
+                className="text-left text-muted-foreground hover:text-foreground"
+              />
               <Link href="/privacy" className="text-muted-foreground hover:text-foreground">Privacy</Link>
               <Link href="/terms" className="text-muted-foreground hover:text-foreground">Terms of use</Link>
             </nav>
