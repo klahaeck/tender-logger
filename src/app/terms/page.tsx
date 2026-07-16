@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 
-import { LegalPage, LegalSection, Placeholder } from "@/components/marketing/legal-page";
+import { LegalPage, LegalSection } from "@/components/marketing/legal-page";
 
 export const metadata: Metadata = {
   title: "Terms of Use",
@@ -18,7 +18,7 @@ export default function TermsPage() {
     >
       <LegalSection title="1. Agreement to these terms">
         <p>
-          These Terms of Use are an agreement between you and <Placeholder>[LEGAL OPERATOR NAME]</Placeholder> (“Family Daybook,” “we,” “us,” or “our”). By accessing or using Family Daybook, you agree to these terms and our <Link href="/privacy" className="font-semibold text-primary underline underline-offset-4">Privacy Policy</Link>. If you do not agree, do not use the service.
+          These Terms of Use are an agreement between you and Family Daybook (“Family Daybook,” “we,” “us,” or “our”). By accessing or using Family Daybook, you agree to these terms and our <Link href="/privacy" className="font-semibold text-primary underline underline-offset-4">Privacy Policy</Link>. If you do not agree, do not use the service.
         </p>
       </LegalSection>
 
@@ -28,7 +28,7 @@ export default function TermsPage() {
 
       <LegalSection title="3. Accounts and security">
         <p>You must provide accurate account information, keep it current, and protect your sign-in credentials and devices. You are responsible for activity under your account and for enabling available multi-factor authentication where appropriate.</p>
-        <p>Notify us promptly at <Placeholder>[PRIVACY/SUPPORT EMAIL]</Placeholder> if you suspect unauthorized access. We may restrict access when reasonably necessary to protect users, information, or the service.</p>
+        <p>Notify us promptly at admin@myfamilydaybook.com if you suspect unauthorized access. We may restrict access when reasonably necessary to protect users, information, or the service.</p>
       </LegalSection>
 
       <LegalSection title="4. Plans and billing">
@@ -78,7 +78,7 @@ export default function TermsPage() {
       </LegalSection>
 
       <LegalSection title="12. Deletion and termination">
-        <p>You may stop using the service at any time. Contact <Placeholder>[PRIVACY/SUPPORT EMAIL]</Placeholder> for account-level deletion requests. We may suspend or terminate access for material violations, security risks, unlawful use, or where required to protect the service or others.</p>
+        <p>You may stop using the service at any time. Contact admin@myfamilydaybook.com for account-level deletion requests. We may suspend or terminate access for material violations, security risks, unlawful use, or where required to protect the service or others.</p>
         <p>Deleting active content does not revoke copies already downloaded by you or an authorized reviewer. Content-free audit tombstones and temporary provider backups may remain as described in the Privacy Policy.</p>
       </LegalSection>
 
@@ -96,7 +96,7 @@ export default function TermsPage() {
       </LegalSection>
 
       <LegalSection title="16. Governing law">
-        <p>These terms are governed by the laws of <Placeholder>[GOVERNING STATE AND COUNTRY]</Placeholder>, without regard to conflict-of-law rules. Any dispute must be brought in the courts located in that jurisdiction unless applicable law requires otherwise.</p>
+        <p>These terms are governed by the laws of MN, USA, without regard to conflict-of-law rules. Any dispute must be brought in the courts located in that jurisdiction unless applicable law requires otherwise.</p>
       </LegalSection>
 
       <LegalSection title="17. Changes to these terms">
@@ -105,7 +105,7 @@ export default function TermsPage() {
 
       <LegalSection title="18. Contact">
         <p>
-          Questions about these terms may be sent to <Placeholder>[PRIVACY/SUPPORT EMAIL]</Placeholder> or mailed to <Placeholder>[LEGAL OPERATOR NAME]</Placeholder>, <Placeholder>[MAILING ADDRESS]</Placeholder>.
+          Questions about these terms may be sent to admin@myfamilydaybook.com.
         </p>
       </LegalSection>
     </LegalPage>

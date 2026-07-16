@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 
-import { LegalPage, LegalSection, Placeholder } from "@/components/marketing/legal-page";
+import { LegalPage, LegalSection } from "@/components/marketing/legal-page";
 
 export const metadata: Metadata = {
   title: "Privacy Policy",
@@ -17,7 +17,7 @@ export default function PrivacyPage() {
     >
       <LegalSection title="1. Who operates Family Daybook">
         <p>
-          Family Daybook is operated by <Placeholder>[LEGAL OPERATOR NAME]</Placeholder> (“Family Daybook,” “we,” “us,” or “our”). This policy applies to the Family Daybook website, application, and related services.
+          Family Daybook is operated by Family Daybook (“Family Daybook,” “we,” “us,” or “our”). This policy applies to the Family Daybook website, application, and related services.
         </p>
       </LegalSection>
 
@@ -85,7 +85,7 @@ export default function PrivacyPage() {
 
       <LegalSection title="9. Your choices and requests">
         <p>Depending on your location, you may have rights to request access, correction, deletion, restriction, portability, or information about how personal information is used. The application also provides tools to review records, append corrections, export reports, manage reviewers, and—when enabled—permanently purge individual records.</p>
-        <p>To submit an account-level or privacy request, email <Placeholder>[PRIVACY/SUPPORT EMAIL]</Placeholder>. We may need to verify your identity and authority before completing a request.</p>
+        <p>To submit an account-level or privacy request, email admin@myfamilydaybook.com. We may need to verify your identity and authority before completing a request.</p>
       </LegalSection>
 
       <LegalSection title="10. Changes to this policy">
@@ -94,7 +94,7 @@ export default function PrivacyPage() {
 
       <LegalSection title="11. Contact us">
         <p>
-          Questions or requests may be sent to <Placeholder>[PRIVACY/SUPPORT EMAIL]</Placeholder> or mailed to <Placeholder>[LEGAL OPERATOR NAME]</Placeholder>, <Placeholder>[MAILING ADDRESS]</Placeholder>.
+          Questions or requests may be sent to admin@myfamilydaybook.com.
         </p>
       </LegalSection>
     </LegalPage>
