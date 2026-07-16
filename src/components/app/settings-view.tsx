@@ -243,7 +243,7 @@ export function SettingsView({ data, timezones }: { data: SettingsData; timezone
               <div className="mb-3 flex items-center justify-between gap-3"><p className="text-sm font-medium">Caregivers</p><Button type="button" variant="outline" size="sm" onClick={() => setCaregivers((current) => [...current, { clientKey: crypto.randomUUID(), displayName: "", relationship: "" }])}><Plus className="size-4" />Add caregiver</Button></div>
               <div className="space-y-3">
                 {caregivers.map((caregiver, index) => (
-                  <div key={caregiver.clientKey} className="relative grid gap-3 pr-12 sm:grid-cols-2 sm:items-start">
+                  <div key={caregiver.clientKey} className="relative grid gap-3 rounded-xl border p-3 pr-12 sm:grid-cols-2 sm:items-start">
                     <div className="grid gap-2"><Label htmlFor={`caregiver-${caregiver.clientKey}`}>Name</Label><Input id={`caregiver-${caregiver.clientKey}`} name={`caregiver-${caregiver.clientKey}`} value={caregiver.displayName} onChange={(event) => setCaregivers((current) => current.map((value, caregiverIndex) => caregiverIndex === index ? { ...value, displayName: event.target.value } : value))} required /></div>
                     <div className="grid gap-2">
                       <Label htmlFor={`relationship-${caregiver.clientKey}`}>Relationship</Label>
@@ -260,7 +260,7 @@ export function SettingsView({ data, timezones }: { data: SettingsData; timezone
                         </SelectContent>
                       </Select>
                     </div>
-                    {!caregiver.id && <Button type="button" variant="ghost" size="icon" className="absolute right-0 top-0 text-destructive hover:text-destructive" aria-label={`Remove caregiver ${index + 1}`} onClick={() => setCaregivers((current) => current.filter((value) => value.clientKey !== caregiver.clientKey))}><Trash2 className="size-4" /></Button>}
+                    {!caregiver.id && <Button type="button" variant="ghost" size="icon" className="absolute right-3 top-3 text-destructive hover:text-destructive" aria-label={`Remove caregiver ${index + 1}`} onClick={() => setCaregivers((current) => current.filter((value) => value.clientKey !== caregiver.clientKey))}><Trash2 className="size-4" /></Button>}
                   </div>
                 ))}
               </div>
