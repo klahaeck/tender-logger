@@ -39,7 +39,7 @@ export function TodayDashboard({ date, today, initialData }: { date: string; tod
   };
 
   return (
-    <div className="space-y-7">
+    <div className="min-w-0 max-w-full space-y-7">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <div className="mb-2 flex flex-wrap items-center gap-2">
@@ -52,8 +52,8 @@ export function TodayDashboard({ date, today, initialData }: { date: string; tod
         <CareEntryDialog date={date} today={today} timezone={data.workspace.timezone} childOptions={data.children} caregivers={data.caregivers} />
       </div>
 
-      <div className="flex flex-col gap-3 rounded-2xl border bg-card p-3 shadow-sm sm:flex-row sm:items-center sm:justify-between">
-        <div className="flex items-center gap-2" role="group" aria-label="Choose log date">
+      <div className="flex min-w-0 max-w-full flex-col gap-3 rounded-2xl border bg-card p-3 shadow-sm sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex min-w-0 max-w-full items-center gap-2" role="group" aria-label="Choose log date">
           <Button
             type="button"
             variant="outline"
@@ -89,7 +89,7 @@ export function TodayDashboard({ date, today, initialData }: { date: string; tod
             Return to today
           </Button>
         ) : (
-          <p className="px-1 text-xs text-muted-foreground">Select an earlier date to add a contemporaneously labeled past entry.</p>
+          <p className="min-w-0 px-1 text-xs text-muted-foreground">Select an earlier date to add a contemporaneously labeled past entry.</p>
         )}
       </div>
 
@@ -102,8 +102,8 @@ export function TodayDashboard({ date, today, initialData }: { date: string; tod
         </div>
       )}
 
-      <div className="grid gap-4 md:grid-cols-[1.4fr_1fr]">
-        <Card className="overflow-hidden border-0 bg-primary text-primary-foreground shadow-lg shadow-primary/10">
+      <div className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-4 md:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)]">
+        <Card className="min-w-0 max-w-full overflow-hidden border-0 bg-primary text-primary-foreground shadow-lg shadow-primary/10">
           <CardContent className="p-6 sm:p-7">
             <div className="flex items-start justify-between gap-4">
               <div>
@@ -120,11 +120,11 @@ export function TodayDashboard({ date, today, initialData }: { date: string; tod
             <p className="mt-3 text-sm text-primary-foreground/75">{data.completion.completed} of {data.completion.total} routine items recorded</p>
           </CardContent>
         </Card>
-        <Card>
+        <Card className="min-w-0 max-w-full">
           <CardContent className="flex h-full flex-col justify-between p-6">
             <div className="flex items-center gap-3">
               <span className="grid size-10 place-items-center rounded-xl bg-secondary text-secondary-foreground"><Users className="size-5" /></span>
-              <div>
+              <div className="min-w-0">
                 <p className="font-medium">{data.children.map((child) => child.displayName).join(" & ")}</p>
                 <p className="text-sm text-muted-foreground">{data.caregivers.length} caregivers configured</p>
               </div>
@@ -139,18 +139,18 @@ export function TodayDashboard({ date, today, initialData }: { date: string; tod
         </Card>
       </div>
 
-      <section aria-labelledby="routine-heading">
+      <section aria-labelledby="routine-heading" className="min-w-0 max-w-full">
         <div className="mb-4 flex items-center justify-between">
           <div>
             <h2 id="routine-heading" className="text-xl font-semibold tracking-tight">Today’s routine</h2>
             <p className="mt-1 text-sm text-muted-foreground">Tap an item to record who handled it and when.</p>
           </div>
         </div>
-        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+        <div className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-3 sm:grid-cols-2 xl:grid-cols-3">
           {sortRoutineItemsByTime(data.tasks).map((task) => {
             const recorded = Boolean(task.entry);
             const trigger = (
-              <button className="group flex w-full items-center gap-4 rounded-2xl border bg-card p-4 text-left shadow-sm transition hover:-translate-y-0.5 hover:border-primary/30 hover:shadow-md">
+              <button className="group flex w-full min-w-0 max-w-full items-center gap-4 rounded-2xl border bg-card p-4 text-left shadow-sm transition hover:-translate-y-0.5 hover:border-primary/30 hover:shadow-md">
                 <span className={`grid size-11 shrink-0 place-items-center rounded-2xl ${recorded ? "bg-primary text-primary-foreground" : "bg-secondary text-secondary-foreground"}`}>
                   {recorded ? <CheckCircle2 className="size-5" /> : <Clock3 className="size-5" />}
                 </span>
@@ -162,10 +162,10 @@ export function TodayDashboard({ date, today, initialData }: { date: string; tod
                       : `${childNames(task.childIds, data)} · around ${task.suggestedTime}`}
                   </span>
                 </span>
-                <ChevronRight className="size-4 text-muted-foreground transition group-hover:translate-x-0.5" />
+                <ChevronRight className="size-4 shrink-0 text-muted-foreground transition group-hover:translate-x-0.5" />
               </button>
             );
-            return recorded ? <div key={task.id}>{trigger}</div> : (
+            return recorded ? <div key={task.id} className="min-w-0 max-w-full">{trigger}</div> : (
               <CareEntryDialog key={task.id} task={task} date={date} today={today} timezone={data.workspace.timezone} childOptions={data.children} caregivers={data.caregivers} trigger={trigger} />
             );
           })}

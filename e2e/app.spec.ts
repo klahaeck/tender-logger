@@ -9,6 +9,36 @@ test("shows the daily care workflow", async ({ page }) => {
   await expect(page.getByLabel("Next day")).toBeDisabled();
 });
 
+test("mobile dashboard content stays within the viewport", async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== "mobile", "This regression targets the narrow mobile layout.");
+
+  await page.goto("/");
+  const layout = await page.evaluate(() => {
+    const viewportWidth = document.documentElement.clientWidth;
+    const visibleElements = Array.from(
+      document.querySelectorAll<HTMLElement>("main, main [data-slot='card'], main section button"),
+    );
+
+    return {
+      viewportWidth,
+      documentWidth: document.documentElement.scrollWidth,
+      overflowingElements: visibleElements
+        .filter((element) => {
+          const bounds = element.getBoundingClientRect();
+          return bounds.left < -0.5 || bounds.right > viewportWidth + 0.5;
+        })
+        .map((element) => ({
+          tag: element.tagName,
+          text: element.textContent?.trim().slice(0, 80),
+          bounds: element.getBoundingClientRect().toJSON(),
+        })),
+    };
+  });
+
+  expect(layout.documentWidth).toBe(layout.viewportWidth);
+  expect(layout.overflowingElements).toEqual([]);
+});
+
 test("primary pages have no serious accessibility violations", async ({ page }) => {
   await page.goto("/");
   const results = await new AxeBuilder({ page }).disableRules(["color-contrast"]).analyze();

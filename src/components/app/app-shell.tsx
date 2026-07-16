@@ -66,7 +66,7 @@ export function AppShell({
   member: Member;
 }) {
   return (
-    <div className="min-h-screen bg-[radial-gradient(circle_at_top_left,var(--surface-glow),transparent_36rem)]">
+    <div className="min-h-screen w-full min-w-0 bg-[radial-gradient(circle_at_top_left,var(--surface-glow),transparent_36rem)]">
       <aside className="fixed inset-y-0 left-0 z-30 hidden w-64 border-r bg-background/92 px-4 py-5 backdrop-blur-xl lg:flex lg:flex-col">
         <Link href="/" aria-label="Family Daybook home" className="mb-8 px-2 py-1">
           <BrandLogo decorative className="w-[208px]" />
@@ -89,7 +89,7 @@ export function AppShell({
         </div>
       </aside>
 
-      <div className="lg:pl-64">
+      <div className="min-w-0 lg:pl-64">
         <header className="sticky top-0 z-20 border-b bg-background/88 backdrop-blur-xl lg:hidden">
           <div className="flex h-16 items-center justify-between px-4">
             <Link href="/" aria-label="Family Daybook home">
@@ -112,7 +112,7 @@ export function AppShell({
             Local demo workspace · Sample records are clearly marked and must not be used as evidence.
           </div>
         )}
-        <main className="mx-auto w-full max-w-7xl px-4 py-6 pb-24 sm:px-6 lg:px-8 lg:py-9">
+        <main className="mx-auto w-full min-w-0 max-w-7xl px-4 py-6 pb-24 sm:px-6 lg:px-8 lg:py-9">
           {children}
         </main>
       </div>
