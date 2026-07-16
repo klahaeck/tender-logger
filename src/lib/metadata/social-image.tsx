@@ -1,7 +1,7 @@
 import { ImageResponse } from "next/og";
 
 export const socialImageAlt =
-  "Family Daybook — private, factual daily parenting records";
+  "Family Daybook — a calmer way to keep family days clear";
 
 export const socialImageSize = {
   width: 1200,
@@ -147,7 +147,7 @@ export function createSocialImage() {
               textTransform: "uppercase",
             }}
           >
-            Private family record
+            Private family daybook
           </div>
           <div
             style={{
@@ -171,7 +171,7 @@ export function createSocialImage() {
               maxWidth: "610px",
             }}
           >
-            Clear, factual parenting records—kept together with care.
+            A calmer place for the details that matter.
           </div>
           <div
             style={{
@@ -192,7 +192,7 @@ export function createSocialImage() {
                 width: "9px",
               }}
             />
-            Caregiving · Appointments · Incidents · Reports
+            Caregiving · Appointments · Notes · Timeline
           </div>
         </div>
       </div>

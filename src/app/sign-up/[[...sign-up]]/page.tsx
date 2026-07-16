@@ -4,10 +4,13 @@ import { redirect } from "next/navigation";
 import { BrandLogo } from "@/components/app/brand-logo";
 import { clerkConfigured } from "@/lib/auth/identity";
 
-export const metadata = { title: "Create account" };
+export const metadata = {
+  title: "Create account",
+  robots: { index: false, follow: false },
+};
 
 export default function SignUpPage() {
-  if (!clerkConfigured()) redirect("/");
+  if (!clerkConfigured()) redirect("/app");
   return (
     <main className="grid min-h-screen place-items-center bg-[radial-gradient(circle_at_top,var(--surface-glow),transparent_34rem)] p-4">
       <div className="space-y-5 text-center">
@@ -17,7 +20,7 @@ export default function SignUpPage() {
             Create your private family workspace
           </p>
         </div>
-        <SignUp />
+        <SignUp fallbackRedirectUrl="/app" />
       </div>
     </main>
   );

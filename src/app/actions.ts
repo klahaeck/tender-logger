@@ -50,12 +50,12 @@ function validationFailure(error: { flatten(): { fieldErrors: Record<string, str
 }
 
 function refreshRecords() {
-  revalidatePath("/");
-  revalidatePath("/timeline");
-  revalidatePath("/appointments");
-  revalidatePath("/incidents");
-  revalidatePath("/reports");
-  revalidatePath("/settings");
+  revalidatePath("/app");
+  revalidatePath("/app/timeline");
+  revalidatePath("/app/appointments");
+  revalidatePath("/app/incidents");
+  revalidatePath("/app/reports");
+  revalidatePath("/app/settings");
 }
 
 export async function createCareEntryAction(input: unknown): Promise<ActionResult<{ id: string }>> {
@@ -156,7 +156,7 @@ export async function generateReportAction(input: unknown): Promise<ActionResult
       await repository.markReportReady(context, report.id, artifacts);
     }
 
-    revalidatePath("/reports");
+    revalidatePath("/app/reports");
     return { ok: true, data: { reportId: report.id, workflowRunId } };
   } catch (error) {
     return fail(error);
@@ -256,11 +256,14 @@ export async function inviteReviewerAction(input: unknown): Promise<ActionResult
       const client = await clerkClient();
       await client.invitations.createInvitation({
         emailAddress: parsed.data.email,
-        redirectUrl: process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000",
+        redirectUrl: new URL(
+          "/app",
+          process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000",
+        ).toString(),
         publicMetadata: { workspaceId: context.workspace.id, role: "reviewer" },
       });
     }
-    revalidatePath("/settings");
+    revalidatePath("/app/settings");
     return { ok: true, data: { memberId: member.id } };
   } catch (error) {
     return fail(error);
@@ -272,7 +275,7 @@ export async function revokeReviewerAction(memberId: string): Promise<ActionResu
     const repository = await getRepository();
     const context = await getRequestContext();
     await repository.revokeReviewer(context, memberId);
-    revalidatePath("/settings");
+    revalidatePath("/app/settings");
     return { ok: true };
   } catch (error) {
     return fail(error);

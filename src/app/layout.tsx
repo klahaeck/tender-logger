@@ -3,21 +3,12 @@ import { Geist, Geist_Mono } from "next/font/google";
 
 import { AppProviders } from "@/components/providers/app-providers";
 import { AuthProvider } from "@/components/providers/auth-provider";
+import { getSiteUrl } from "@/lib/metadata/site-url";
 import "./globals.css";
 
 const title = "Family Daybook";
 const description =
-  "A private daily parenting log for factual caregiving records, appointments, incidents, and attorney-ready evidence.";
-
-function getMetadataBase() {
-  const appUrl =
-    process.env.NEXT_PUBLIC_APP_URL ??
-    (process.env.VERCEL_PROJECT_PRODUCTION_URL
-      ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}`
-      : "http://localhost:3000");
-
-  return new URL(appUrl);
-}
+  "A calm, private family daybook for caregiving, appointments, factual notes, and the important moments in between.";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -30,15 +21,19 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  metadataBase: getMetadataBase(),
+  metadataBase: getSiteUrl(),
   applicationName: title,
-  title: { default: title, template: `%s · ${title}` },
+  title: {
+    default: "Family Daybook — Calm, private family recordkeeping",
+    template: `%s · ${title}`,
+  },
   description,
   keywords: [
     "parenting log",
     "caregiving records",
     "family documentation",
-    "parenting timeline",
+    "family timeline",
+    "private family daybook",
   ],
   openGraph: {
     type: "website",
@@ -52,15 +47,7 @@ export const metadata: Metadata = {
     title,
     description,
   },
-  robots: {
-    index: false,
-    follow: false,
-    googleBot: {
-      index: false,
-      follow: false,
-      noimageindex: true,
-    },
-  },
+  robots: { index: true, follow: true },
 };
 
 export default function RootLayout({

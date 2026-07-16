@@ -1,46 +1,129 @@
 import { expect, test } from "@playwright/test";
 import AxeBuilder from "@axe-core/playwright";
 
-test("shows the daily care workflow", async ({ page }) => {
+test("public homepage presents the Family Daybook brochure", async ({ page }) => {
   await page.goto("/");
+  await expect(page.getByRole("heading", { name: "A calmer way to keep the days that matter clear." })).toBeVisible();
+  await expect(page.locator('[aria-label="Example Family Daybook dashboard"]')).toBeVisible();
+  await expect(page.getByRole("link", { name: "Start your daybook" }).first()).toHaveAttribute("href", "/sign-up");
+  await expect(page.getByRole("link", { name: "Sign in" }).first()).toHaveAttribute("href", "/sign-in");
+  await expect(page.getByRole("link", { name: "Privacy", exact: true }).last()).toHaveAttribute("href", "/privacy");
+  await expect(page.getByRole("link", { name: "Terms of use" })).toHaveAttribute("href", "/terms");
+  await expect(page.getByText(/local demo workspace/i)).toHaveCount(0);
+});
+
+test("public pages have no serious accessibility violations", async ({ page }) => {
+  await page.goto("/");
+  const results = await new AxeBuilder({ page }).analyze();
+  expect(
+    results.violations.filter(
+      (violation) => violation.impact === "critical" || violation.impact === "serious",
+    ),
+  ).toEqual([]);
+});
+
+test("public legal pages are available with visible draft placeholders", async ({ page }) => {
+  await page.goto("/privacy");
+  await expect(page.getByRole("heading", { name: "Privacy policy" })).toBeVisible();
+  await expect(page.getByText("[LEGAL OPERATOR NAME]").first()).toBeVisible();
+
+  await page.goto("/terms");
+  await expect(page.getByRole("heading", { name: "Terms of use" })).toBeVisible();
+  await expect(page.getByText("[GOVERNING STATE AND COUNTRY]")).toBeVisible();
+});
+
+test("public routes expose the intended crawler metadata", async ({ page, request }) => {
+  await page.goto("/");
+  await expect(page.locator('meta[name="robots"]')).toHaveAttribute("content", /index, follow/);
+
+  await page.goto("/app");
+  await expect(page.locator('meta[name="robots"]')).toHaveAttribute("content", /noindex, nofollow/);
+
+  const robots = await (await request.get("/robots.txt")).text();
+  expect(robots).toContain("Disallow: /app");
+  expect(robots).toContain("Disallow: /api");
+
+  const sitemap = await (await request.get("/sitemap.xml")).text();
+  expect(sitemap).toContain("<loc>http://127.0.0.1:3100/</loc>");
+  expect(sitemap).toContain("<loc>http://127.0.0.1:3100/privacy</loc>");
+  expect(sitemap).toContain("<loc>http://127.0.0.1:3100/terms</loc>");
+  expect(sitemap).not.toContain("/app</loc>");
+});
+
+test("social images are privacy-safe 1200 by 630 PNGs", async ({ request }) => {
+  for (const path of ["/opengraph-image", "/twitter-image"]) {
+    const response = await request.get(path);
+    expect(response.ok()).toBe(true);
+    expect(response.headers()["content-type"]).toContain("image/png");
+    const image = await response.body();
+    expect(image.subarray(1, 4).toString()).toBe("PNG");
+    expect(image.readUInt32BE(16)).toBe(1200);
+    expect(image.readUInt32BE(20)).toBe(630);
+  }
+});
+
+test("legacy application routes permanently redirect under app", async ({ request }) => {
+  const redirects = [
+    ["/timeline", "/app/timeline"],
+    ["/appointments", "/app/appointments"],
+    ["/incidents", "/app/incidents"],
+    ["/reports", "/app/reports"],
+    ["/settings", "/app/settings"],
+  ];
+
+  for (const [source, destination] of redirects) {
+    const response = await request.get(source, { maxRedirects: 0 });
+    expect(response.status()).toBe(308);
+    expect(response.headers().location).toBe(destination);
+  }
+
+  const datedResponse = await request.get("/?date=2026-07-15", { maxRedirects: 0 });
+  expect(datedResponse.status()).toBe(308);
+  expect(datedResponse.headers().location).toBe("/app?date=2026-07-15");
+});
+
+test("shows the daily care workflow", async ({ page }) => {
+  await page.goto("/app");
   await expect(page.getByText("Daily care log", { exact: true })).toBeVisible();
   await expect(page.getByRole("heading", { name: /today’s routine/i })).toBeVisible();
   await expect(page.getByText(/local demo workspace/i)).toBeVisible();
   await expect(page.getByLabel("Next day")).toBeDisabled();
 });
 
-test("mobile dashboard content stays within the viewport", async ({ page }, testInfo) => {
+test("mobile public and dashboard content stays within the viewport", async ({ page }, testInfo) => {
   test.skip(testInfo.project.name !== "mobile", "This regression targets the narrow mobile layout.");
 
-  await page.goto("/");
-  const layout = await page.evaluate(() => {
-    const viewportWidth = document.documentElement.clientWidth;
-    const visibleElements = Array.from(
-      document.querySelectorAll<HTMLElement>("main, main [data-slot='card'], main section button"),
-    );
+  for (const path of ["/", "/app"]) {
+    await page.goto(path);
+    const layout = await page.evaluate(() => {
+      const viewportWidth = document.documentElement.clientWidth;
+      const visibleElements = Array.from(
+        document.querySelectorAll<HTMLElement>("main, main [data-slot='card'], main section button"),
+      );
 
-    return {
-      viewportWidth,
-      documentWidth: document.documentElement.scrollWidth,
-      overflowingElements: visibleElements
-        .filter((element) => {
-          const bounds = element.getBoundingClientRect();
-          return bounds.left < -0.5 || bounds.right > viewportWidth + 0.5;
-        })
-        .map((element) => ({
-          tag: element.tagName,
-          text: element.textContent?.trim().slice(0, 80),
-          bounds: element.getBoundingClientRect().toJSON(),
-        })),
-    };
-  });
+      return {
+        viewportWidth,
+        documentWidth: document.documentElement.scrollWidth,
+        overflowingElements: visibleElements
+          .filter((element) => {
+            const bounds = element.getBoundingClientRect();
+            return bounds.left < -0.5 || bounds.right > viewportWidth + 0.5;
+          })
+          .map((element) => ({
+            tag: element.tagName,
+            text: element.textContent?.trim().slice(0, 80),
+            bounds: element.getBoundingClientRect().toJSON(),
+          })),
+      };
+    });
 
-  expect(layout.documentWidth).toBe(layout.viewportWidth);
-  expect(layout.overflowingElements).toEqual([]);
+    expect(layout.documentWidth).toBe(layout.viewportWidth);
+    expect(layout.overflowingElements).toEqual([]);
+  }
 });
 
 test("primary pages have no serious accessibility violations", async ({ page }) => {
-  await page.goto("/");
+  await page.goto("/app");
   const results = await new AxeBuilder({ page }).disableRules(["color-contrast"]).analyze();
   expect(results.violations.filter((violation) => violation.impact === "critical" || violation.impact === "serious")).toEqual([]);
 });
@@ -49,7 +132,7 @@ test("shows saved routine changes on Today", async ({ page }, testInfo) => {
   test.skip(testInfo.project.name !== "chromium", "Run the stateful settings check once on desktop Chromium.");
   const marker = Date.now().toString();
 
-  await page.goto("/");
+  await page.goto("/app");
   const dateInput = page.getByRole("textbox", { name: "Log date", exact: true });
   const today = await dateInput.inputValue();
   const [year, month, day] = today.split("-").map(Number);
@@ -87,7 +170,7 @@ test("owner can complete the auditable record lifecycle", async ({ page, request
   const correctedObservation = `${observation} A towel was placed on the tile at 4:07 PM.`;
   const attachmentName = `safety-note-${marker}.png`;
 
-  await page.goto("/");
+  await page.goto("/app");
   await page.getByRole("button", { name: /^Time together/ }).click();
   await expect(page.getByRole("heading", { name: "Time together" })).toBeVisible();
   await page.getByText("Parent B", { exact: true }).click();
@@ -97,7 +180,7 @@ test("owner can complete the auditable record lifecycle", async ({ page, request
   await page.getByRole("button", { name: "Save record" }).click();
   await expect(page.getByRole("heading", { name: "Time together" })).not.toBeVisible();
 
-  await page.goto("/appointments");
+  await page.goto("/app/appointments");
   for (const status of appointmentStatuses) {
     const title = `${status[0].toUpperCase()}${status.slice(1)} appointment ${marker}`;
     await page.getByRole("button", { name: "Add appointment" }).click();
@@ -108,7 +191,7 @@ test("owner can complete the auditable record lifecycle", async ({ page, request
     await expect(page.getByRole("heading", { name: title })).toBeVisible();
   }
 
-  await page.goto("/incidents");
+  await page.goto("/app/incidents");
   await page.getByRole("button", { name: "Add incident" }).click();
   await page.getByLabel("Location (optional)").fill("Upstairs bathroom");
   await page.getByLabel("People present").fill("Parent A, Parent B");
@@ -134,11 +217,11 @@ test("owner can complete the auditable record lifecycle", async ({ page, request
   await page.getByRole("button", { name: "Append correction" }).click();
   await expect(page.getByRole("main").getByText(correctedObservation, { exact: true })).toBeVisible();
 
-  await page.goto("/");
+  await page.goto("/app");
   await page.getByRole("button", { name: "Finalize day" }).click();
   await expect(page.getByText("Finalized", { exact: true })).toBeVisible();
 
-  await page.goto("/timeline");
+  await page.goto("/app/timeline");
   await page.getByLabel("Search timeline").fill("water was observed");
   const timelineCard = page.locator('[data-slot="card"]').filter({ hasText: correctedObservation });
   const attachmentHref = await timelineCard.getByRole("link", { name: attachmentName }).getAttribute("href");
@@ -148,7 +231,7 @@ test("owner can complete the auditable record lifecycle", async ({ page, request
   await expect(page.getByText(/SHA-256:/).first()).toBeVisible();
   await page.getByRole("button", { name: "Close" }).click();
 
-  await page.goto("/reports");
+  await page.goto("/app/reports");
   await page.getByRole("button", { name: "Create report" }).click();
   await page.getByRole("button", { name: "Generate package" }).click();
   const pdfLink = page.getByRole("link", { name: "PDF" }).first();
@@ -165,8 +248,8 @@ test("owner can complete the auditable record lifecycle", async ({ page, request
   expect(zipResponse.ok()).toBe(true);
   expect(Array.from((await zipResponse.body()).subarray(0, 2))).toEqual([80, 75]);
 
-  await page.goto("/settings");
-  await expect(page.getByRole("heading", { name: "Reviewers", exact: true })).toBeVisible();
+  await page.goto("/app/settings");
+  await expect(page.getByText("Reviewers", { exact: true })).toBeVisible();
   await expect(page.getByLabel("Display name")).toHaveCount(1);
   await expect(page.getByLabel("Birthdate")).toHaveCount(1);
   const childName = `Child ${marker}`;
@@ -184,7 +267,11 @@ test("owner can complete the auditable record lifecycle", async ({ page, request
   const removedRoutineLabel = await page.getByLabel("Routine label").first().inputValue();
   await page.getByRole("button", { name: `Remove ${removedRoutineLabel}` }).click();
   await page.getByRole("button", { name: "Add routine item" }).click();
-  await page.getByLabel("Routine label").last().fill(`Evening walk ${marker}`);
+  const newRoutineIndex = await page.getByLabel("Routine label").evaluateAll((inputs) =>
+    inputs.findIndex((input) => !(input as HTMLInputElement).value),
+  );
+  expect(newRoutineIndex).toBeGreaterThanOrEqual(0);
+  await page.getByLabel("Routine label").nth(newRoutineIndex).fill(`Evening walk ${marker}`);
   await page.getByRole("switch", { name: "Allow permanent deletion" }).click();
   await page.getByRole("button", { name: "Save workspace" }).click();
   await expect(page.getByText("Settings saved.", { exact: true })).toBeVisible();
@@ -225,7 +312,7 @@ test("owner can complete the auditable record lifecycle", async ({ page, request
   await page.getByRole("button", { name: `Revoke ${reviewerNames[0]}` }).click();
   await expect(page.getByText("revoked", { exact: true })).toBeVisible();
 
-  await page.goto("/timeline");
+  await page.goto("/app/timeline");
   await page.getByLabel("Search timeline").fill("water was observed");
   const purgeCard = page.locator('[data-slot="card"]').filter({ hasText: correctedObservation });
   await purgeCard.getByRole("button", { name: "Purge" }).click();
@@ -235,14 +322,14 @@ test("owner can complete the auditable record lifecycle", async ({ page, request
   await expect(page.getByText("No records match these filters.", { exact: true })).toBeVisible();
   expect((await request.get(attachmentHref!)).status()).toBe(404);
 
-  await page.goto("/reports");
+  await page.goto("/app/reports");
   await expect(page.getByText("No report snapshots yet", { exact: true })).toBeVisible();
 });
 
 test("adds a record to a previous day and labels it as a late entry", async ({ page }) => {
   const marker = Date.now().toString();
   const label = `Historical caregiving ${marker}`;
-  await page.goto("/");
+  await page.goto("/app");
   const dateInput = page.getByRole("textbox", { name: "Log date", exact: true });
   const today = await dateInput.inputValue();
   const [year, month, day] = today.split("-").map(Number);
@@ -261,14 +348,14 @@ test("adds a record to a previous day and labels it as a late entry", async ({ p
   await page.getByRole("button", { name: "Save record" }).click();
   await expect(page.getByRole("heading", { name: "Add caregiving record" })).not.toBeVisible();
 
-  await page.goto("/timeline");
+  await page.goto("/app/timeline");
   await page.getByLabel("Search timeline").fill(label);
   const card = page.locator('[data-slot="card"]').filter({ hasText: label });
   await expect(card.getByText("Late entry", { exact: true })).toBeVisible();
   await expect(card.getByText(/Occurred/)).toBeVisible();
   await expect(card.getByText(/Entered/)).toBeVisible();
 
-  await page.goto("/?date=9999-12-31");
-  await expect(page).toHaveURL(/\/$/);
+  await page.goto("/app?date=9999-12-31");
+  await expect(page).toHaveURL(/\/app$/);
   await expect(page.getByRole("textbox", { name: "Log date", exact: true })).toHaveValue(today);
 });

@@ -21,20 +21,20 @@ import { cn } from "@/lib/utils";
 import type { Member, Workspace } from "@/lib/domain/types";
 
 const nav = [
-  { href: "/", label: "Today", icon: ClipboardCheck },
-  { href: "/timeline", label: "Timeline", icon: Clock3 },
-  { href: "/appointments", label: "Appointments", icon: CalendarDays },
-  { href: "/incidents", label: "Incidents", icon: ShieldAlert },
-  { href: "/reports", label: "Reports", icon: FileText },
-  { href: "/settings", label: "Settings", icon: Settings },
+  { href: "/app", label: "Today", icon: ClipboardCheck },
+  { href: "/app/timeline", label: "Timeline", icon: Clock3 },
+  { href: "/app/appointments", label: "Appointments", icon: CalendarDays },
+  { href: "/app/incidents", label: "Incidents", icon: ShieldAlert },
+  { href: "/app/reports", label: "Reports", icon: FileText },
+  { href: "/app/settings", label: "Settings", icon: Settings },
 ];
 
 function Navigation({ onNavigate, role }: { onNavigate?: () => void; role: Member["role"] }) {
   const pathname = usePathname();
   return (
     <nav aria-label="Primary" className="space-y-1">
-      {nav.filter((item) => role === "owner" || item.href !== "/settings").map((item) => {
-        const active = item.href === "/" ? pathname === "/" : pathname.startsWith(item.href);
+      {nav.filter((item) => role === "owner" || item.href !== "/app/settings").map((item) => {
+        const active = item.href === "/app" ? pathname === "/app" : pathname.startsWith(item.href);
         return (
           <Link
             key={item.href}
@@ -68,7 +68,7 @@ export function AppShell({
   return (
     <div className="min-h-screen w-full min-w-0 bg-[radial-gradient(circle_at_top_left,var(--surface-glow),transparent_36rem)]">
       <aside className="fixed inset-y-0 left-0 z-30 hidden w-64 border-r bg-background/92 px-4 py-5 backdrop-blur-xl lg:flex lg:flex-col">
-        <Link href="/" aria-label="Family Daybook home" className="mb-8 px-2 py-1">
+        <Link href="/app" aria-label="Family Daybook app home" className="mb-8 px-2 py-1">
           <BrandLogo decorative className="w-[208px]" />
         </Link>
         <Navigation role={member.role} />
@@ -92,7 +92,7 @@ export function AppShell({
       <div className="min-w-0 lg:pl-64">
         <header className="sticky top-0 z-20 border-b bg-background/88 backdrop-blur-xl lg:hidden">
           <div className="flex h-16 items-center justify-between px-4">
-            <Link href="/" aria-label="Family Daybook home">
+            <Link href="/app" aria-label="Family Daybook app home">
               <BrandLogo decorative className="w-[164px]" />
             </Link>
             <Sheet>

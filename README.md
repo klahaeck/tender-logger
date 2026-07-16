@@ -1,6 +1,6 @@
 # Family Daybook
 
-Family Daybook is a private, mobile-first daily parenting log for factual caregiving records, appointments, incidents, immutable corrections, and attorney-reviewable evidence packages.
+Family Daybook pairs a public brochure site with a private, mobile-first daily family log for factual caregiving records, appointments, incidents, immutable corrections, and organized report packages.
 
 It is a recordkeeping tool, not legal advice, an emergency service, or a guarantee that any record will be admitted or given a particular weight by a court. Ask local counsel what should be collected, retained, disclosed, or submitted.
 
@@ -30,7 +30,7 @@ npm install
 npm run dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000). With no environment variables, the app runs against an in-memory sample workspace. It is intentionally labeled as demo data and must not be used for real records.
+Open [http://localhost:3000](http://localhost:3000) for the public brochure or [http://localhost:3000/app](http://localhost:3000/app) for the product. With no environment variables, `/app` runs against an in-memory sample workspace. It is intentionally labeled as demo data and must not be used for real records.
 
 Useful checks:
 
@@ -49,7 +49,7 @@ MongoDB integration tests run when `TEST_MONGODB_URI` is present. Browser tests 
 Copy `.env.example` to `.env.local` for development. Configure the same values in Vercel for production.
 
 1. Create a dedicated MongoDB Atlas database and least-privilege application user.
-2. Create a Clerk application, enable MFA, and choose whether accounts are created through Clerk invitations or self-service registration.
+2. Create a Clerk application, enable self-service registration, and make MFA available to every owner and reviewer.
 3. Create a Vercel Private Blob store.
 4. Deploy to Vercel. Workflow SDK routes are generated during the Next.js build.
 5. Sign in with each owner account. Its first login bootstraps a separate private workspace and initial routine template. A user matching a pending reviewer invitation joins that workspace as a read-only reviewer instead.

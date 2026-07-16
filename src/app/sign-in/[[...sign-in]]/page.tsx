@@ -4,10 +4,13 @@ import { redirect } from "next/navigation";
 import { BrandLogo } from "@/components/app/brand-logo";
 import { clerkConfigured } from "@/lib/auth/identity";
 
-export const metadata = { title: "Sign in" };
+export const metadata = {
+  title: "Sign in",
+  robots: { index: false, follow: false },
+};
 
 export default function SignInPage() {
-  if (!clerkConfigured()) redirect("/");
+  if (!clerkConfigured()) redirect("/app");
   return (
     <main className="grid min-h-screen place-items-center bg-[radial-gradient(circle_at_top,var(--surface-glow),transparent_34rem)] p-4">
       <div className="space-y-5 text-center">
@@ -15,7 +18,7 @@ export default function SignInPage() {
           <BrandLogo className="mx-auto w-64" />
           <p className="mt-1 text-sm text-muted-foreground">Private family records</p>
         </div>
-        <SignIn />
+        <SignIn fallbackRedirectUrl="/app" />
       </div>
     </main>
   );

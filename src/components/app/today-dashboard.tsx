@@ -34,7 +34,7 @@ export function TodayDashboard({ date, today, initialData }: { date: string; tod
   const navigateToDate = (nextDate: string) => {
     if (!isValidLocalDate(nextDate) || nextDate > today) return;
     startNavigation(() => {
-      router.push(nextDate === today ? "/" : `/?date=${encodeURIComponent(nextDate)}`, { scroll: false });
+      router.push(nextDate === today ? "/app" : `/app?date=${encodeURIComponent(nextDate)}`, { scroll: false });
     });
   };
 
