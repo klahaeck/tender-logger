@@ -107,6 +107,7 @@ export function MarketingShell({
             <nav className="grid grid-cols-2 gap-x-10 gap-y-3 text-sm" aria-label="Footer navigation">
               <Link href="/#features" className="text-muted-foreground hover:text-foreground">Features</Link>
               <Link href="/pricing" className="text-muted-foreground hover:text-foreground">Pricing</Link>
+              <Link href="/co-parenting-recordkeeping" className="text-muted-foreground hover:text-foreground">Co-parenting records</Link>
               <SessionControl
                 signedIn={signedIn}
                 className="text-left text-muted-foreground hover:text-foreground"

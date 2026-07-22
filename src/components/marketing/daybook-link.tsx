@@ -7,16 +7,18 @@ import { cn } from "@/lib/utils";
 export function DaybookLink({
   signedIn,
   className,
+  signedOutLabel = "Start your daybook",
 }: {
   signedIn: boolean;
   className?: string;
+  signedOutLabel?: string;
 }) {
   return (
     <Link
       href={signedIn ? "/app" : "/sign-up"}
       className={cn(buttonVariants({ size: "lg" }), className)}
     >
-      {signedIn ? "View your daybook" : "Start your daybook"}
+      {signedIn ? "View your daybook" : signedOutLabel}
       <ArrowRight className="size-4" aria-hidden="true" />
     </Link>
   );
