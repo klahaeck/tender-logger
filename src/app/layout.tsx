@@ -9,7 +9,7 @@ import "./globals.css";
 
 const title = "Family Daybook";
 const description =
-  "A calm, private family daybook for caregiving, appointments, factual notes, and the important moments in between.";
+  "Family Daybook is a private family recordkeeping app for caregiving, appointments, factual notes, and an organized family timeline.";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
