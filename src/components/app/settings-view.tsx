@@ -331,7 +331,7 @@ export function SettingsView({ data, timezones }: { data: SettingsData; timezone
               </div>
               <Button type="button" variant="outline" size="sm" className="mt-3" onClick={() => setRoutineItems((current) => sortRoutineItemsByTime([...current, { clientKey: crypto.randomUUID(), label: "", suggestedTime: "08:00", childIds: children.map((child) => child.id), weekdays: EVERY_DAY, active: true }]))}><Plus className="size-4" />Add routine item</Button>
             </div>
-            <div className="flex items-start justify-between gap-4 rounded-xl border p-4"><div><p className="flex items-center gap-2 text-sm font-medium"><LockKeyhole className="size-4" />Allow permanent deletion</p><p className="mt-1 text-xs leading-5 text-muted-foreground">Disabled by default. Purges require owner access, MFA, a reason, and typed confirmation.</p></div><Switch checked={hardDeleteEnabled} onCheckedChange={setHardDeleteEnabled} aria-label="Allow permanent deletion" /></div>
+            <div className="flex items-start justify-between gap-4 rounded-xl border p-4"><div><p className="flex items-center gap-2 text-sm font-medium"><LockKeyhole className="size-4" />Allow permanent deletion</p><p className="mt-1 text-xs leading-5 text-muted-foreground">Disabled by default. Purges require owner access, a reason, and typed confirmation.</p></div><Switch checked={hardDeleteEnabled} onCheckedChange={setHardDeleteEnabled} aria-label="Allow permanent deletion" /></div>
             {message && <p className="text-sm text-muted-foreground">{message}</p>}
             <Button type="submit" disabled={save.isPending}><Check className="size-4" />{save.isPending ? "Saving…" : "Save workspace"}</Button>
           </form>

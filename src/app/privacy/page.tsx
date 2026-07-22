@@ -79,7 +79,7 @@ export default function PrivacyPage() {
 
       <LegalSection title="8. Retention and deletion">
         <p>We retain account and workspace information while the service is active and as reasonably needed to provide the service, maintain security and audit history, resolve disputes, or meet applicable obligations.</p>
-        <p>Records ordinarily remain until an authorized owner deletes them. Permanent record deletion is disabled by default and, when enabled, requires an owner with multi-factor authentication. A permanent purge removes active record content, attachments, and stored reports containing that record while retaining a content-free deletion tombstone.</p>
+        <p>Records ordinarily remain until an authorized owner deletes them. Permanent record deletion is disabled by default and can be enabled by an owner in workspace settings. A permanent purge requires a reason and typed confirmation, and removes active record content, attachments, and stored reports containing that record while retaining a content-free deletion tombstone.</p>
         <p>Downloaded copies cannot be revoked. Residual copies may remain in provider backups until those backups expire under the provider’s configured retention schedule.</p>
       </LegalSection>
 

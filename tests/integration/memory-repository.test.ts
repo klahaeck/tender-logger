@@ -509,9 +509,9 @@ describe("memory repository integration", () => {
     expect(artifacts.manifestHash).toHaveLength(64);
   });
 
-  it("cascades an enabled hard purge and retains a content-free tombstone", async () => {
+  it("allows an owner without MFA to run an enabled hard purge and retains a content-free tombstone", async () => {
     const repository = new MemoryParentingRepository();
-    const context = await repository.resolveContext(identity);
+    const context = await repository.resolveContext({ ...identity, mfaEnabled: false });
     const settings = await repository.getSettings(context);
     await repository.updateSettings(context, {
       name: settings.workspace.name,

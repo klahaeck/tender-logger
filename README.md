@@ -18,7 +18,7 @@ It is a recordkeeping tool, not legal advice, an emergency service, or a guarant
 - Searchable combined timeline and authorized attachment downloads
 - Finalized-day visibility for read-only attorney reviewers
 - Vercel Workflow report generation with PDF, original files, JSON manifest, and checksum ZIP
-- Configurable owner-only hard purge with MFA requirement and content-free tombstones
+- Configurable owner-only hard purge with typed confirmation and content-free tombstones
 - MongoDB Atlas persistence plus a clearly marked in-memory local demo mode
 
 ## Local development

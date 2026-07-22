@@ -47,7 +47,6 @@ function fail(error: unknown): ActionResult<never> {
     NOT_FOUND: "The requested record was not found.",
     ALREADY_INVITED: "That reviewer already has access or a pending invitation.",
     HARD_DELETE_DISABLED: "Hard deletion is disabled in workspace settings.",
-    MFA_REQUIRED: "Multi-factor authentication is required for permanent deletion.",
   };
   return { ok: false, error: safe[message] ?? (process.env.NODE_ENV === "production" ? "The request could not be completed." : message) };
 }

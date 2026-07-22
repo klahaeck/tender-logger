@@ -800,7 +800,6 @@ export class MongoParentingRepository implements ParentingRepository {
   ) {
     requireOwner(context.member.role);
     if (!context.workspace.hardDeleteEnabled) throw new Error("HARD_DELETE_DISABLED");
-    if (!context.identity.mfaEnabled) throw new Error("MFA_REQUIRED");
     const bundle = await this.getRecordBundle(context, input.recordType, input.recordId);
     if (!bundle) throw new Error("NOT_FOUND");
     const revisionIds = bundle.revisions.map((item) => item.id);

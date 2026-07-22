@@ -708,7 +708,6 @@ export class MemoryParentingRepository implements ParentingRepository {
     requireOwner(context.member.role);
     const data = state();
     if (!data.workspace.hardDeleteEnabled) throw new Error("HARD_DELETE_DISABLED");
-    if (!context.identity.mfaEnabled) throw new Error("MFA_REQUIRED");
     const bundle = await this.getRecordBundle(context, input.recordType, input.recordId);
     if (!bundle) throw new Error("NOT_FOUND");
     const priorHashes = bundle.revisions.map((revision) => revision.hash);
