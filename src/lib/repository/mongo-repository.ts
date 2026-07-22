@@ -25,6 +25,7 @@ import type {
 } from "@/lib/domain/types";
 import type {
   AppointmentInput,
+  CareEntryCorrectionInput,
   CareEntryInput,
   CorrectionInput,
   IncidentInput,
@@ -385,6 +386,90 @@ export class MongoParentingRepository implements ParentingRepository {
       await this.insertAudit(context, "created", "care_entry", entry.id, session);
     });
     return toPlainData(entry);
+  }
+
+  async correctCareEntry(context: RequestContext, input: CareEntryCorrectionInput) {
+    requireOwner(context.member.role);
+    const entry = await (await col<CareEntry>("careEntries")).findOne({
+      id: input.recordId,
+      workspaceId: context.workspace.id,
+    });
+    if (!entry) throw new Error("NOT_FOUND");
+    if (entry.taskKey === "time_together" && !input.durationMinutes) {
+      throw new Error("DURATION_REQUIRED");
+    }
+    const previous = await (await col<RecordRevision>("recordRevisions")).findOne({
+      id: entry.currentRevisionId,
+      workspaceId: context.workspace.id,
+    });
+    if (!previous) throw new Error("REVISION_NOT_FOUND");
+
+    const recordedAt = new Date().toISOString();
+    const occurredAt = new Date(input.occurredAt).toISOString();
+    const { reason } = input;
+    const correction = {
+      childIds: input.childIds,
+      caregiverIds: input.caregiverIds,
+      status: input.status,
+      durationMinutes: input.durationMinutes,
+      activityType: input.activityType,
+      notes: input.notes,
+    };
+    const payload = { ...recordPayload(toPlainData(entry)), ...correction, occurredAt };
+    const revision: RecordRevision = {
+      id: id("rev"),
+      workspaceId: context.workspace.id,
+      recordType: "care_entry",
+      recordId: entry.id,
+      previousRevisionId: previous.id,
+      revisionNumber: previous.revisionNumber + 1,
+      payload,
+      reason,
+      authorId: context.member.id,
+      recordedAt,
+      hash: createRevisionHash({
+        payload,
+        previousHash: previous.hash,
+        authorId: context.member.id,
+        recordedAt,
+      }),
+    };
+    const lateEntry = entry.lateEntry || lateEntryFor(occurredAt, entry.recordedAt);
+    const optionalFields = ["durationMinutes", "activityType", "notes"] as const;
+    const setFields: Record<string, unknown> = {
+      childIds: correction.childIds,
+      caregiverIds: correction.caregiverIds,
+      status: correction.status,
+      occurredAt,
+      currentRevisionId: revision.id,
+      lateEntry,
+    };
+    const unsetFields: Record<string, ""> = {};
+    for (const field of optionalFields) {
+      if (correction[field] === undefined) unsetFields[field] = "";
+      else setFields[field] = correction[field];
+    }
+
+    await this.transaction(async (session) => {
+      await (await col<RecordRevision>("recordRevisions")).insertOne(revision, { session });
+      await (await col<CareEntry>("careEntries")).updateOne(
+        { id: entry.id, workspaceId: context.workspace.id },
+        {
+          $set: setFields,
+          ...(Object.keys(unsetFields).length ? { $unset: unsetFields } : {}),
+        },
+        { session },
+      );
+      await this.insertAudit(
+        context,
+        "corrected",
+        "care_entry",
+        entry.id,
+        session,
+        { revisionNumber: revision.revisionNumber },
+      );
+    });
+    return toPlainData(revision);
   }
 
   async createAppointment(context: RequestContext, input: AppointmentInput) {

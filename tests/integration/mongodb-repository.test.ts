@@ -37,6 +37,24 @@ describe.skipIf(!configured)("MongoDB repository integration", () => {
     expect(bundle?.revisions).toHaveLength(1);
     expect(bundle?.revisions[0].hash).toHaveLength(64);
 
+    await repository.correctCareEntry(context, {
+      recordId: entry.id,
+      childIds: entry.childIds,
+      caregiverIds: entry.caregiverIds,
+      status: "partial",
+      occurredAt: "2026-07-14T12:30:00.000Z",
+      notes: "Corrected details.",
+      reason: "Corrected the recorded outcome.",
+    });
+    const correctedBundle = await repository.getRecordBundle(context, "care_entry", entry.id);
+    expect(correctedBundle?.record).toMatchObject({
+      status: "partial",
+      occurredAt: "2026-07-14T12:30:00.000Z",
+      notes: "Corrected details.",
+    });
+    expect(correctedBundle?.revisions).toHaveLength(2);
+    expect(correctedBundle?.revisions[1].payload).not.toHaveProperty("_id");
+
     const secondContext = await repository.resolveContext({
       authUserId: "mongo-owner-two",
       email: "mongo-owner-two@example.test",

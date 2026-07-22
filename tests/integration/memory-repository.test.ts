@@ -44,6 +44,48 @@ describe("memory repository integration", () => {
     expect(bundle?.revisions[1].hash).not.toBe(bundle?.revisions[0].hash);
   });
 
+  it("corrects all editable care-entry details without replacing the prior revision", async () => {
+    const repository = new MemoryParentingRepository();
+    const context = await repository.resolveContext(identity);
+    const dashboard = await repository.getDashboard(context, "2026-07-14");
+    const entry = await repository.createCareEntry(context, {
+      localDate: "2026-07-14",
+      taskKey: "custom",
+      taskLabel: "Prepared snack",
+      childIds: [dashboard.children[0].id],
+      caregiverIds: [dashboard.caregivers[0].id],
+      status: "completed",
+      occurredAt: "2026-07-14T12:00:00.000Z",
+      notes: "Prepared fruit.",
+    });
+
+    await repository.correctCareEntry(context, {
+      recordId: entry.id,
+      childIds: [dashboard.children[0].id],
+      caregiverIds: [dashboard.caregivers.at(-1)!.id],
+      status: "partial",
+      occurredAt: "2026-07-14T13:30:00.000Z",
+      notes: "Prepared sliced fruit.",
+      reason: "Corrected the caregiver, time, and outcome.",
+    });
+
+    const bundle = await repository.getRecordBundle(context, "care_entry", entry.id);
+    expect(bundle?.record).toMatchObject({
+      status: "partial",
+      occurredAt: "2026-07-14T13:30:00.000Z",
+      notes: "Prepared sliced fruit.",
+    });
+    expect(bundle?.revisions).toHaveLength(2);
+    expect(bundle?.revisions[0].payload).toMatchObject({
+      status: "completed",
+      notes: "Prepared fruit.",
+    });
+    expect(bundle?.revisions[1].payload).toMatchObject({
+      status: "partial",
+      notes: "Prepared sliced fruit.",
+    });
+  });
+
   it("blocks reviewer mutations at the repository boundary", async () => {
     const repository = new MemoryParentingRepository();
     const owner = await repository.resolveContext(identity);

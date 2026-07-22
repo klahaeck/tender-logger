@@ -17,6 +17,7 @@ import type {
 } from "@/lib/domain/types";
 import type {
   AppointmentInput,
+  CareEntryCorrectionInput,
   CareEntryInput,
   CorrectionInput,
   IncidentInput,
@@ -71,6 +72,10 @@ export interface ParentingRepository {
     context: RequestContext,
     input: CareEntryInput,
   ): Promise<CareEntry>;
+  correctCareEntry(
+    context: RequestContext,
+    input: CareEntryCorrectionInput,
+  ): Promise<RecordRevision>;
   createAppointment(
     context: RequestContext,
     input: AppointmentInput,

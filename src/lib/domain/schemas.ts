@@ -42,6 +42,18 @@ export const careEntrySchema = z
     }
   });
 
+export const careEntryCorrectionSchema = z.object({
+  recordId: z.string().min(1),
+  childIds: idArray,
+  caregiverIds: idArray,
+  status: z.enum(["completed", "partial", "missed", "not_applicable"]),
+  occurredAt: isoDateTime,
+  durationMinutes: z.coerce.number().int().min(1).max(1440).optional(),
+  activityType: z.string().trim().max(100).optional(),
+  notes: z.string().trim().max(2000).optional(),
+  reason: z.string().trim().min(5).max(500),
+});
+
 export const appointmentSchema = z.object({
   childIds: idArray,
   title: z.string().trim().min(2).max(160),
@@ -186,6 +198,7 @@ export const purgeSchema = z.object({
 });
 
 export type CareEntryInput = z.infer<typeof careEntrySchema>;
+export type CareEntryCorrectionInput = z.infer<typeof careEntryCorrectionSchema>;
 export type AppointmentInput = z.infer<typeof appointmentSchema>;
 export type IncidentInput = z.infer<typeof incidentSchema>;
 export type CorrectionInput = z.infer<typeof correctionSchema>;

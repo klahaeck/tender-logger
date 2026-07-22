@@ -22,6 +22,7 @@ import type {
 } from "@/lib/domain/types";
 import type {
   AppointmentInput,
+  CareEntryCorrectionInput,
   CareEntryInput,
   CorrectionInput,
   IncidentInput,
@@ -329,6 +330,67 @@ export class MemoryParentingRepository implements ParentingRepository {
     data.careEntries.push(entry);
     await this.audit(context, "created", "care_entry", entry.id);
     return entry;
+  }
+
+  async correctCareEntry(context: RequestContext, input: CareEntryCorrectionInput) {
+    requireOwner(context.member.role);
+    const data = state();
+    const entry = data.careEntries.find((item) => item.id === input.recordId);
+    if (!entry) throw new Error("NOT_FOUND");
+    if (entry.taskKey === "time_together" && !input.durationMinutes) {
+      throw new Error("DURATION_REQUIRED");
+    }
+    const previous = data.revisions.find(
+      (revision) => revision.id === entry.currentRevisionId,
+    );
+    if (!previous) throw new Error("REVISION_NOT_FOUND");
+
+    const recordedAt = new Date().toISOString();
+    const occurredAt = new Date(input.occurredAt).toISOString();
+    const { reason } = input;
+    const correction = {
+      childIds: input.childIds,
+      caregiverIds: input.caregiverIds,
+      status: input.status,
+      durationMinutes: input.durationMinutes,
+      activityType: input.activityType,
+      notes: input.notes,
+    };
+    const payload = { ...recordPayload(entry), ...correction, occurredAt };
+    const revision: RecordRevision = {
+      id: id("rev"),
+      workspaceId: data.workspace.id,
+      recordType: "care_entry",
+      recordId: entry.id,
+      previousRevisionId: previous.id,
+      revisionNumber: previous.revisionNumber + 1,
+      payload,
+      reason,
+      authorId: context.member.id,
+      recordedAt,
+      hash: createRevisionHash({
+        payload,
+        previousHash: previous.hash,
+        authorId: context.member.id,
+        recordedAt,
+      }),
+    };
+
+    data.revisions.push(revision);
+    Object.assign(entry, correction, {
+      occurredAt,
+      currentRevisionId: revision.id,
+      lateEntry: entry.lateEntry || lateEntryFor(occurredAt, entry.recordedAt),
+    });
+    await this.audit(
+      context,
+      "corrected",
+      "care_entry",
+      entry.id,
+      { revisionNumber: revision.revisionNumber },
+      previous.hash,
+    );
+    return revision;
   }
 
   async createAppointment(context: RequestContext, input: AppointmentInput) {

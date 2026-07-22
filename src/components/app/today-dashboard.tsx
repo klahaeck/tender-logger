@@ -143,14 +143,14 @@ export function TodayDashboard({ date, today, initialData }: { date: string; tod
         <div className="mb-4 flex items-center justify-between">
           <div>
             <h2 id="routine-heading" className="text-xl font-semibold tracking-tight">Today’s routine</h2>
-            <p className="mt-1 text-sm text-muted-foreground">Tap an item to record who handled it and when.</p>
+            <p className="mt-1 text-sm text-muted-foreground">Tap an item to record it or correct an existing entry.</p>
           </div>
         </div>
         <div className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-3 sm:grid-cols-2 xl:grid-cols-3">
           {sortRoutineItemsByTime(data.tasks).map((task) => {
             const recorded = Boolean(task.entry);
             const trigger = (
-              <button className="group flex w-full min-w-0 max-w-full items-center gap-4 rounded-2xl border bg-card p-4 text-left shadow-sm transition hover:-translate-y-0.5 hover:border-primary/30 hover:shadow-md">
+              <button type="button" aria-label={`${recorded ? "Change" : "Record"} ${task.label}`} className="group flex w-full min-w-0 max-w-full items-center gap-4 rounded-2xl border bg-card p-4 text-left shadow-sm transition hover:-translate-y-0.5 hover:border-primary/30 hover:shadow-md">
                 <span className={`grid size-11 shrink-0 place-items-center rounded-2xl ${recorded ? "bg-primary text-primary-foreground" : "bg-secondary text-secondary-foreground"}`}>
                   {recorded ? <CheckCircle2 className="size-5" /> : <Clock3 className="size-5" />}
                 </span>
@@ -165,8 +165,8 @@ export function TodayDashboard({ date, today, initialData }: { date: string; tod
                 <ChevronRight className="size-4 shrink-0 text-muted-foreground transition group-hover:translate-x-0.5" />
               </button>
             );
-            return recorded ? <div key={task.id} className="min-w-0 max-w-full">{trigger}</div> : (
-              <CareEntryDialog key={task.id} task={task} date={date} today={today} timezone={data.workspace.timezone} childOptions={data.children} caregivers={data.caregivers} trigger={trigger} />
+            return (
+              <CareEntryDialog key={`${task.id}-${task.entry?.currentRevisionId ?? "new"}`} task={task} date={date} today={today} timezone={data.workspace.timezone} childOptions={data.children} caregivers={data.caregivers} trigger={trigger} />
             );
           })}
         </div>

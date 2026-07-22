@@ -8,6 +8,7 @@ import { isValidLocalDate, localDateInTimezone } from "@/lib/domain/dates";
 import { id, sha256 } from "@/lib/domain/integrity";
 import {
   appointmentSchema,
+  careEntryCorrectionSchema,
   careEntrySchema,
   correctionSchema,
   incidentSchema,
@@ -80,6 +81,44 @@ export async function createCareEntryAction(input: unknown): Promise<ActionResul
     const entry = await repository.createCareEntry(context, parsed.data);
     refreshRecords();
     return { ok: true, data: { id: entry.id } };
+  } catch (error) {
+    return fail(error);
+  }
+}
+
+export async function correctCareEntryAction(
+  input: unknown,
+): Promise<ActionResult<{ revisionId: string }>> {
+  const parsed = careEntryCorrectionSchema.safeParse(input);
+  if (!parsed.success) return validationFailure(parsed.error);
+  try {
+    const repository = await getRepository();
+    const context = await getRequestContext();
+    const bundle = await repository.getRecordBundle(context, "care_entry", parsed.data.recordId);
+    if (!bundle || !("dailyLogId" in bundle.record)) throw new Error("NOT_FOUND");
+
+    const today = localDateInTimezone(new Date(), context.workspace.timezone);
+    const originalDate = localDateInTimezone(
+      new Date(bundle.record.occurredAt),
+      context.workspace.timezone,
+    );
+    const correctedDate = localDateInTimezone(
+      new Date(parsed.data.occurredAt),
+      context.workspace.timezone,
+    );
+    if (correctedDate > today) {
+      return { ok: false, error: "Care records cannot be moved to a future date." };
+    }
+    if (correctedDate !== originalDate) {
+      return { ok: false, error: "The corrected time must stay on the original log date." };
+    }
+    if (bundle.record.taskKey === "time_together" && !parsed.data.durationMinutes) {
+      return { ok: false, error: "Add the duration for time together." };
+    }
+
+    const revision = await repository.correctCareEntry(context, parsed.data);
+    refreshRecords();
+    return { ok: true, data: { revisionId: revision.id } };
   } catch (error) {
     return fail(error);
   }

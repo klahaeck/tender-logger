@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  careEntryCorrectionSchema,
   careEntrySchema,
   incidentSchema,
   reportSchema,
@@ -17,6 +18,18 @@ describe("domain validation", () => {
       caregiverIds: ["caregiver_1"],
       status: "completed",
       occurredAt: "2026-07-14T18:00:00.000Z",
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it("requires a reason when correcting a care entry", () => {
+    const result = careEntryCorrectionSchema.safeParse({
+      recordId: "care_1",
+      childIds: ["child_1"],
+      caregiverIds: ["caregiver_1"],
+      status: "partial",
+      occurredAt: "2026-07-14T18:00:00.000Z",
+      reason: "no",
     });
     expect(result.success).toBe(false);
   });
