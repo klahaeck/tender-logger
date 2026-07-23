@@ -49,7 +49,7 @@ export function TodayDashboard({ date, today, initialData }: { date: string; tod
           <h1 className="text-3xl font-semibold tracking-tight sm:text-4xl">{formatDay(date)}</h1>
           <p className="mt-2 text-sm text-muted-foreground">A clear, factual view of {historical ? "care on this day" : "today’s care"} for your children.</p>
         </div>
-        <CareEntryDialog date={date} today={today} timezone={data.workspace.timezone} childOptions={data.children} caregivers={data.caregivers} />
+        <CareEntryDialog date={date} today={today} timezone={data.workspace.timezone} childOptions={data.children} caregivers={data.caregivers} finalized={data.dailyLog.status === "finalized"} />
       </div>
 
       <div className="flex min-w-0 max-w-full flex-col gap-3 rounded-2xl border bg-card p-3 shadow-sm sm:flex-row sm:items-center sm:justify-between">
@@ -97,7 +97,7 @@ export function TodayDashboard({ date, today, initialData }: { date: string; tod
         <div className="flex gap-3 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-amber-950">
           <Clock3 className="mt-0.5 size-4 shrink-0" />
           <p className="text-sm leading-6">
-            Records added to this day are labeled as late entries and retain separate occurrence and server-controlled entry times.
+            Records added by the end of the following calendar day are not labeled late. Later records retain separate occurrence and server-controlled entry times.
           </p>
         </div>
       )}
@@ -143,7 +143,7 @@ export function TodayDashboard({ date, today, initialData }: { date: string; tod
         <div className="mb-4 flex items-center justify-between">
           <div>
             <h2 id="routine-heading" className="text-xl font-semibold tracking-tight">Today’s routine</h2>
-            <p className="mt-1 text-sm text-muted-foreground">Tap an item to record it or correct an existing entry.</p>
+            <p className="mt-1 text-sm text-muted-foreground">Tap an item to record it, edit it while the day is open, or correct it after finalization.</p>
           </div>
         </div>
         <div className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-3 sm:grid-cols-2 xl:grid-cols-3">
@@ -166,7 +166,7 @@ export function TodayDashboard({ date, today, initialData }: { date: string; tod
               </button>
             );
             return (
-              <CareEntryDialog key={`${task.id}-${task.entry?.currentRevisionId ?? "new"}`} task={task} date={date} today={today} timezone={data.workspace.timezone} childOptions={data.children} caregivers={data.caregivers} trigger={trigger} />
+              <CareEntryDialog key={`${task.id}-${task.entry?.currentRevisionId ?? "new"}`} task={task} date={date} today={today} timezone={data.workspace.timezone} childOptions={data.children} caregivers={data.caregivers} finalized={data.dailyLog.status === "finalized"} trigger={trigger} />
             );
           })}
         </div>

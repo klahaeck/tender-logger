@@ -37,6 +37,18 @@ describe.skipIf(!configured)("MongoDB repository integration", () => {
     expect(bundle?.revisions).toHaveLength(1);
     expect(bundle?.revisions[0].hash).toHaveLength(64);
 
+    await repository.updateCareEntry(context, {
+      recordId: entry.id,
+      childIds: entry.childIds,
+      caregiverIds: entry.caregiverIds,
+      status: "partial",
+      occurredAt: "2026-07-14T12:15:00.000Z",
+      notes: "Updated details.",
+    });
+    expect((await repository.getRecordBundle(context, "care_entry", entry.id))?.revisions).toHaveLength(1);
+
+    await repository.finalizeDailyLog(context, "2026-07-14");
+
     await repository.correctCareEntry(context, {
       recordId: entry.id,
       childIds: entry.childIds,

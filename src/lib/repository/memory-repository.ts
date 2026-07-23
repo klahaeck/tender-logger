@@ -24,6 +24,7 @@ import type {
   AppointmentInput,
   CareEntryCorrectionInput,
   CareEntryInput,
+  CareEntryUpdateInput,
   CorrectionInput,
   IncidentInput,
   ReportInput,
@@ -35,6 +36,7 @@ import {
   recordPayload,
   requireOwner,
   toTimelineItems,
+  withCurrentLateEntryStatus,
 } from "./helpers";
 import type {
   ParentingRepository,
@@ -112,6 +114,9 @@ export class MemoryParentingRepository implements ParentingRepository {
   async getDashboard(context: RequestContext, date: string) {
     const data = state();
     const dailyLog = ensureDailyLog(data, date);
+    const entries = data.careEntries.map((entry) =>
+      withCurrentLateEntryStatus(entry, context.workspace.timezone),
+    );
     const template =
       data.templates.find((item) => item.version === dailyLog.templateVersion) ??
       latestTemplate(data);
@@ -120,7 +125,7 @@ export class MemoryParentingRepository implements ParentingRepository {
       .filter((item) => item.active && item.weekdays.includes(weekday))
       .map((item) => ({
         ...item,
-        entry: data.careEntries
+        entry: entries
           .filter((entry) => entry.dailyLogId === dailyLog.id)
           .find((entry) => entry.templateItemId === item.id),
       }));
@@ -141,7 +146,7 @@ export class MemoryParentingRepository implements ParentingRepository {
         total: tasks.length,
         percent: tasks.length ? Math.round((completed / tasks.length) * 100) : 0,
       },
-      recentEntries: data.careEntries
+      recentEntries: entries
         .filter((entry) => entry.dailyLogId === dailyLog.id)
         .sort(
           (a, b) =>
@@ -173,6 +178,8 @@ export class MemoryParentingRepository implements ParentingRepository {
         entries: visibleEntries,
         appointments: data.appointments,
         incidents: data.incidents,
+        dailyLogs: data.dailyLogs,
+        timezone: context.workspace.timezone,
       }),
       attachments: data.attachments.filter((attachment) =>
         visibleRecordIds.has(attachment.recordId),
@@ -232,7 +239,13 @@ export class MemoryParentingRepository implements ParentingRepository {
       return null;
     }
     return {
-      record,
+      record:
+        recordType === "care_entry"
+          ? withCurrentLateEntryStatus(
+              record as CareEntry,
+              context.workspace.timezone,
+            )
+          : record,
       revisions: data.revisions
         .filter(
           (revision) =>
@@ -270,6 +283,8 @@ export class MemoryParentingRepository implements ParentingRepository {
       entries: snapshot.filters.includeCare
         ? data.careEntries.filter(
             (entry) => inRange(entry.occurredAt) && includesChildren(entry.childIds),
+          ).map((entry) =>
+            withCurrentLateEntryStatus(entry, data.workspace.timezone),
           )
         : [],
       appointments: snapshot.filters.includeAppointments
@@ -323,12 +338,76 @@ export class MemoryParentingRepository implements ParentingRepository {
       notes: input.notes,
       currentRevisionId: revision.id,
       createdBy: context.member.id,
-      lateEntry:
-        lateEntryFor(input.occurredAt, recordedAt) ||
-        input.localDate < localDateInTimezone(new Date(recordedAt), context.workspace.timezone),
+      lateEntry: lateEntryFor(
+        input.occurredAt,
+        recordedAt,
+        context.workspace.timezone,
+      ),
     };
     data.careEntries.push(entry);
     await this.audit(context, "created", "care_entry", entry.id);
+    return entry;
+  }
+
+  async updateCareEntry(context: RequestContext, input: CareEntryUpdateInput) {
+    requireOwner(context.member.role);
+    const data = state();
+    const entry = data.careEntries.find((item) => item.id === input.recordId);
+    if (!entry) throw new Error("NOT_FOUND");
+    const dailyLog = data.dailyLogs.find((log) => log.id === entry.dailyLogId);
+    if (!dailyLog) throw new Error("NOT_FOUND");
+    if (dailyLog.status !== "open") throw new Error("DAY_FINALIZED");
+    if (entry.taskKey === "time_together" && !input.durationMinutes) {
+      throw new Error("DURATION_REQUIRED");
+    }
+    const revision = data.revisions.find(
+      (item) => item.id === entry.currentRevisionId,
+    );
+    if (!revision) throw new Error("REVISION_NOT_FOUND");
+    const previousRevision = revision.previousRevisionId
+      ? data.revisions.find((item) => item.id === revision.previousRevisionId)
+      : undefined;
+    if (revision.previousRevisionId && !previousRevision) {
+      throw new Error("REVISION_NOT_FOUND");
+    }
+
+    const savedAt = new Date().toISOString();
+    const occurredAt = new Date(input.occurredAt).toISOString();
+    const update = {
+      childIds: input.childIds,
+      caregiverIds: input.caregiverIds,
+      status: input.status,
+      durationMinutes: input.durationMinutes,
+      activityType: input.activityType,
+      notes: input.notes,
+    };
+    const payload = { ...revision.payload, ...update, occurredAt };
+    for (const field of ["durationMinutes", "activityType", "notes"] as const) {
+      if (update[field] === undefined) delete payload[field];
+    }
+
+    Object.assign(revision, {
+      payload,
+      authorId: context.member.id,
+      recordedAt: savedAt,
+      hash: createRevisionHash({
+        payload,
+        previousHash: previousRevision?.hash,
+        authorId: context.member.id,
+        recordedAt: savedAt,
+      }),
+    });
+    Object.assign(entry, update, {
+      occurredAt,
+      lateEntry: lateEntryFor(
+        occurredAt,
+        entry.recordedAt,
+        context.workspace.timezone,
+      ),
+    });
+    await this.audit(context, "updated", "care_entry", entry.id, {
+      revisionNumber: revision.revisionNumber,
+    });
     return entry;
   }
 
@@ -337,6 +416,9 @@ export class MemoryParentingRepository implements ParentingRepository {
     const data = state();
     const entry = data.careEntries.find((item) => item.id === input.recordId);
     if (!entry) throw new Error("NOT_FOUND");
+    const dailyLog = data.dailyLogs.find((log) => log.id === entry.dailyLogId);
+    if (!dailyLog) throw new Error("NOT_FOUND");
+    if (dailyLog.status !== "finalized") throw new Error("DAY_NOT_FINALIZED");
     if (entry.taskKey === "time_together" && !input.durationMinutes) {
       throw new Error("DURATION_REQUIRED");
     }
@@ -380,7 +462,11 @@ export class MemoryParentingRepository implements ParentingRepository {
     Object.assign(entry, correction, {
       occurredAt,
       currentRevisionId: revision.id,
-      lateEntry: entry.lateEntry || lateEntryFor(occurredAt, entry.recordedAt),
+      lateEntry: lateEntryFor(
+        occurredAt,
+        entry.recordedAt,
+        context.workspace.timezone,
+      ),
     });
     await this.audit(
       context,
@@ -458,6 +544,13 @@ export class MemoryParentingRepository implements ParentingRepository {
     const data = state();
     const record = findRecord(data, input.recordType, input.recordId);
     if (!record) throw new Error("NOT_FOUND");
+    if (input.recordType === "care_entry") {
+      const dailyLog = data.dailyLogs.find(
+        (log) => log.id === (record as CareEntry).dailyLogId,
+      );
+      if (!dailyLog) throw new Error("NOT_FOUND");
+      if (dailyLog.status !== "finalized") throw new Error("DAY_NOT_FINALIZED");
+    }
     const previous = data.revisions.find(
       (revision) => revision.id === record.currentRevisionId,
     );

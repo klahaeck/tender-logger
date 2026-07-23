@@ -10,6 +10,8 @@ import {
   appointmentSchema,
   careEntryCorrectionSchema,
   careEntrySchema,
+  careEntryTextUpdateSchema,
+  careEntryUpdateSchema,
   correctionSchema,
   incidentSchema,
   inviteSchema,
@@ -45,6 +47,8 @@ function fail(error: unknown): ActionResult<never> {
     MONGODB_REQUIRED:
       "MongoDB must be configured before authenticated accounts can use the app.",
     NOT_FOUND: "The requested record was not found.",
+    DAY_FINALIZED: "This day has already been finalized. Add a correction instead.",
+    DAY_NOT_FINALIZED: "This day is still open. Edit the record instead.",
     ALREADY_INVITED: "That reviewer already has access or a pending invitation.",
     HARD_DELETE_DISABLED: "Hard deletion is disabled in workspace settings.",
   };
@@ -118,6 +122,71 @@ export async function correctCareEntryAction(
     const revision = await repository.correctCareEntry(context, parsed.data);
     refreshRecords();
     return { ok: true, data: { revisionId: revision.id } };
+  } catch (error) {
+    return fail(error);
+  }
+}
+
+export async function updateCareEntryAction(
+  input: unknown,
+): Promise<ActionResult<{ id: string }>> {
+  const parsed = careEntryUpdateSchema.safeParse(input);
+  if (!parsed.success) return validationFailure(parsed.error);
+  try {
+    const repository = await getRepository();
+    const context = await getRequestContext();
+    const bundle = await repository.getRecordBundle(context, "care_entry", parsed.data.recordId);
+    if (!bundle || !("dailyLogId" in bundle.record)) throw new Error("NOT_FOUND");
+
+    const today = localDateInTimezone(new Date(), context.workspace.timezone);
+    const originalDate = localDateInTimezone(
+      new Date(bundle.record.occurredAt),
+      context.workspace.timezone,
+    );
+    const updatedDate = localDateInTimezone(
+      new Date(parsed.data.occurredAt),
+      context.workspace.timezone,
+    );
+    if (updatedDate > today) {
+      return { ok: false, error: "Care records cannot be moved to a future date." };
+    }
+    if (updatedDate !== originalDate) {
+      return { ok: false, error: "The updated time must stay on the original log date." };
+    }
+    if (bundle.record.taskKey === "time_together" && !parsed.data.durationMinutes) {
+      return { ok: false, error: "Add the duration for time together." };
+    }
+
+    const entry = await repository.updateCareEntry(context, parsed.data);
+    refreshRecords();
+    return { ok: true, data: { id: entry.id } };
+  } catch (error) {
+    return fail(error);
+  }
+}
+
+export async function updateCareEntryNotesAction(
+  input: unknown,
+): Promise<ActionResult<{ id: string }>> {
+  const parsed = careEntryTextUpdateSchema.safeParse(input);
+  if (!parsed.success) return validationFailure(parsed.error);
+  try {
+    const repository = await getRepository();
+    const context = await getRequestContext();
+    const bundle = await repository.getRecordBundle(context, "care_entry", parsed.data.recordId);
+    if (!bundle || !("dailyLogId" in bundle.record)) throw new Error("NOT_FOUND");
+    const entry = await repository.updateCareEntry(context, {
+      recordId: bundle.record.id,
+      childIds: bundle.record.childIds,
+      caregiverIds: bundle.record.caregiverIds,
+      status: bundle.record.status,
+      occurredAt: bundle.record.occurredAt,
+      durationMinutes: bundle.record.durationMinutes,
+      activityType: bundle.record.activityType,
+      notes: parsed.data.notes,
+    });
+    refreshRecords();
+    return { ok: true, data: { id: entry.id } };
   } catch (error) {
     return fail(error);
   }

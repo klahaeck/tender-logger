@@ -4,7 +4,7 @@ import { useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Check, Clock3, Plus } from "lucide-react";
 
-import { correctCareEntryAction, createCareEntryAction } from "@/app/actions";
+import { correctCareEntryAction, createCareEntryAction, updateCareEntryAction } from "@/app/actions";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -29,6 +29,7 @@ export function CareEntryDialog({
   timezone,
   childOptions,
   caregivers,
+  finalized = false,
   trigger,
 }: {
   task?: TodayTask;
@@ -37,10 +38,12 @@ export function CareEntryDialog({
   timezone: string;
   childOptions: Child[];
   caregivers: Caregiver[];
+  finalized?: boolean;
   trigger?: React.ReactElement;
 }) {
   const queryClient = useQueryClient();
   const editing = Boolean(task?.entry);
+  const correcting = editing && finalized;
   const [open, setOpen] = useState(false);
   const [selectedChildren, setSelectedChildren] = useState<string[]>(task?.entry?.childIds ?? task?.childIds ?? childOptions.map((child) => child.id));
   const [selectedCaregivers, setSelectedCaregivers] = useState<string[]>(
@@ -74,10 +77,15 @@ export function CareEntryDialog({
         notes: formData.get("notes")?.toString() || undefined,
       };
       const result = task?.entry
-        ? await correctCareEntryAction({
+        ? correcting
+          ? await correctCareEntryAction({
+              recordId: task.entry.id,
+              ...details,
+              reason: formData.get("reason")?.toString(),
+            })
+          : await updateCareEntryAction({
             recordId: task.entry.id,
             ...details,
-            reason: formData.get("reason")?.toString(),
           })
         : await createCareEntryAction({
             localDate: date,
@@ -116,7 +124,9 @@ export function CareEntryDialog({
             <DialogTitle>{editing ? `Change ${task?.label}` : task?.label ?? "Add caregiving record"}</DialogTitle>
             <DialogDescription>
               {editing
-                ? "Save a correction while preserving the prior version and its original entry time."
+                ? correcting
+                  ? "Save a correction while preserving the prior version and its original entry time."
+                  : "Update this record directly while the day is still open."
                 : "Record what occurred. The app adds a separate, server-controlled entry time."}
             </DialogDescription>
           </DialogHeader>
@@ -178,7 +188,7 @@ export function CareEntryDialog({
               <Label htmlFor="notes">Factual notes (optional)</Label>
               <Textarea id="notes" name="notes" maxLength={2000} rows={4} defaultValue={task?.entry?.notes} placeholder="Record observable details without conclusions or inferred motives." />
             </div>
-            {editing && (
+            {correcting && (
               <div className="space-y-2">
                 <Label htmlFor={`reason-${task?.entry?.id}`}>Reason for change</Label>
                 <Textarea id={`reason-${task?.entry?.id}`} name="reason" rows={2} required minLength={5} maxLength={500} placeholder="Briefly explain what needed to be corrected." />
@@ -190,7 +200,7 @@ export function CareEntryDialog({
           <DialogFooter>
             <Button type="submit" disabled={mutation.isPending || selectedChildren.length === 0 || selectedCaregivers.length === 0}>
               {mutation.isPending ? <Clock3 className="size-4 animate-spin" /> : <Check className="size-4" />}
-              {mutation.isPending ? "Saving…" : editing ? "Save correction" : "Save record"}
+              {mutation.isPending ? "Saving…" : correcting ? "Save correction" : editing ? "Save changes" : "Save record"}
             </Button>
           </DialogFooter>
         </form>

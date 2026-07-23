@@ -1,11 +1,13 @@
 import type {
   Appointment,
   CareEntry,
+  DailyLog,
   Incident,
   RoutineTemplateItem,
   TimelineItem,
 } from "@/lib/domain/types";
 import type { WorkspaceSettingsInput } from "@/lib/domain/schemas";
+import { lateEntryFor } from "@/lib/domain/dates";
 import { id } from "@/lib/domain/integrity";
 
 export function requireOwner(role: string): void {
@@ -39,26 +41,42 @@ export function createNextRoutineItems(
   });
 }
 
+export function withCurrentLateEntryStatus(
+  entry: CareEntry,
+  timezone: string,
+): CareEntry {
+  return {
+    ...entry,
+    lateEntry: lateEntryFor(entry.occurredAt, entry.recordedAt, timezone),
+  };
+}
+
 export function toTimelineItems(input: {
   entries: CareEntry[];
   appointments: Appointment[];
   incidents: Incident[];
+  dailyLogs: DailyLog[];
+  timezone: string;
 }): TimelineItem[] {
   return [
     ...input.entries.map(
-      (entry): TimelineItem => ({
-        id: entry.id,
-        kind: "care",
-        occurredAt: entry.occurredAt,
-        recordedAt: entry.recordedAt,
-        title: entry.taskLabel,
-        description: entry.notes,
-        childIds: entry.childIds,
-        caregiverIds: entry.caregiverIds,
-        status: entry.status,
-        lateEntry: entry.lateEntry,
-        currentRevisionId: entry.currentRevisionId,
-      }),
+      (storedEntry): TimelineItem => {
+        const entry = withCurrentLateEntryStatus(storedEntry, input.timezone);
+        return {
+          id: entry.id,
+          kind: "care",
+          occurredAt: entry.occurredAt,
+          recordedAt: entry.recordedAt,
+          title: entry.taskLabel,
+          description: entry.notes,
+          childIds: entry.childIds,
+          caregiverIds: entry.caregiverIds,
+          status: entry.status,
+          lateEntry: entry.lateEntry,
+          dailyLogStatus: input.dailyLogs.find((log) => log.id === entry.dailyLogId)?.status,
+          currentRevisionId: entry.currentRevisionId,
+        };
+      },
     ),
     ...input.appointments.map(
       (appointment): TimelineItem => ({

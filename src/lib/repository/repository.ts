@@ -19,6 +19,7 @@ import type {
   AppointmentInput,
   CareEntryCorrectionInput,
   CareEntryInput,
+  CareEntryUpdateInput,
   CorrectionInput,
   IncidentInput,
   ReportInput,
@@ -71,6 +72,10 @@ export interface ParentingRepository {
   createCareEntry(
     context: RequestContext,
     input: CareEntryInput,
+  ): Promise<CareEntry>;
+  updateCareEntry(
+    context: RequestContext,
+    input: CareEntryUpdateInput,
   ): Promise<CareEntry>;
   correctCareEntry(
     context: RequestContext,

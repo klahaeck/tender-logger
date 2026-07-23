@@ -32,6 +32,7 @@ describe("memory repository integration", () => {
       occurredAt: "2026-07-14T12:00:00.000Z",
       notes: "Prepared fruit.",
     });
+    await repository.finalizeDailyLog(context, "2026-07-14");
     await repository.correctRecord(context, {
       recordType: "care_entry",
       recordId: entry.id,
@@ -42,6 +43,66 @@ describe("memory repository integration", () => {
     expect(bundle?.revisions).toHaveLength(2);
     expect(bundle?.revisions[1].previousRevisionId).toBe(bundle?.revisions[0].id);
     expect(bundle?.revisions[1].hash).not.toBe(bundle?.revisions[0].hash);
+  });
+
+  it("updates an open-day care entry without appending a correction", async () => {
+    const repository = new MemoryParentingRepository();
+    const context = await repository.resolveContext(identity);
+    const dashboard = await repository.getDashboard(context, "2026-07-14");
+    const entry = await repository.createCareEntry(context, {
+      localDate: "2026-07-14",
+      taskKey: "custom",
+      taskLabel: "Prepared snack",
+      childIds: [dashboard.children[0].id],
+      caregiverIds: [dashboard.caregivers[0].id],
+      status: "completed",
+      occurredAt: "2026-07-14T12:00:00.000Z",
+      notes: "Prepared fruit.",
+    });
+
+    const updated = await repository.updateCareEntry(context, {
+      recordId: entry.id,
+      childIds: entry.childIds,
+      caregiverIds: entry.caregiverIds,
+      status: "partial",
+      occurredAt: "2026-07-14T12:30:00.000Z",
+      notes: "Prepared sliced fruit.",
+    });
+
+    expect(updated).toMatchObject({
+      id: entry.id,
+      currentRevisionId: entry.currentRevisionId,
+      status: "partial",
+      occurredAt: "2026-07-14T12:30:00.000Z",
+      notes: "Prepared sliced fruit.",
+    });
+    const bundle = await repository.getRecordBundle(context, "care_entry", entry.id);
+    expect(bundle?.revisions).toHaveLength(1);
+    expect(bundle?.revisions[0].payload).toMatchObject({
+      status: "partial",
+      notes: "Prepared sliced fruit.",
+    });
+    expect((await repository.getTimeline(context)).items.find((item) => item.id === entry.id)?.dailyLogStatus).toBe("open");
+    await expect(
+      repository.correctRecord(context, {
+        recordType: "care_entry",
+        recordId: entry.id,
+        correctedText: "This should be a normal edit.",
+        reason: "The day is still open.",
+      }),
+    ).rejects.toThrow("DAY_NOT_FINALIZED");
+
+    await repository.finalizeDailyLog(context, "2026-07-14");
+    expect((await repository.getTimeline(context)).items.find((item) => item.id === entry.id)?.dailyLogStatus).toBe("finalized");
+    await expect(
+      repository.updateCareEntry(context, {
+        recordId: entry.id,
+        childIds: entry.childIds,
+        caregiverIds: entry.caregiverIds,
+        status: "completed",
+        occurredAt: "2026-07-14T12:45:00.000Z",
+      }),
+    ).rejects.toThrow("DAY_FINALIZED");
   });
 
   it("corrects all editable care-entry details without replacing the prior revision", async () => {
@@ -58,6 +119,8 @@ describe("memory repository integration", () => {
       occurredAt: "2026-07-14T12:00:00.000Z",
       notes: "Prepared fruit.",
     });
+
+    await repository.finalizeDailyLog(context, "2026-07-14");
 
     await repository.correctCareEntry(context, {
       recordId: entry.id,
@@ -414,7 +477,33 @@ describe("memory repository integration", () => {
       occurredAt: `${historicalDate}T12:00:00.000Z`,
     });
     expect(historicalEntry.dailyLogId).toBe(historical.dailyLog.id);
-    expect(historicalEntry.lateEntry).toBe(true);
+    expect(historicalEntry.lateEntry).toBe(false);
+    historicalEntry.lateEntry = true;
+    expect(
+      (await repository.getTimeline(context)).items.find(
+        (item) => item.id === historicalEntry.id,
+      )?.lateEntry,
+    ).toBe(false);
+    expect(
+      (await repository.getRecordBundle(
+        context,
+        "care_entry",
+        historicalEntry.id,
+      ))?.record,
+    ).toMatchObject({ lateEntry: false });
+
+    const olderDate = shiftLocalDate(today, -2);
+    const older = await repository.getDashboard(context, olderDate);
+    const olderEntry = await repository.createCareEntry(context, {
+      localDate: olderDate,
+      taskKey: "custom",
+      taskLabel: "Older care",
+      childIds: [older.children[0].id],
+      caregiverIds: [older.caregivers[0].id],
+      status: "completed",
+      occurredAt: `${olderDate}T12:00:00.000Z`,
+    });
+    expect(olderEntry.lateEntry).toBe(true);
 
     const thirdVersion = await repository.updateSettings(context, {
       name: savedAgain.workspace.name,

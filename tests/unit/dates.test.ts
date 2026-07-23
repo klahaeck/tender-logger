@@ -16,9 +16,21 @@ describe("date handling", () => {
     expect(localDateInTimezone(instant, "America/Chicago")).toBe("2026-07-14");
   });
 
-  it("marks entries recorded more than 24 hours later", () => {
-    expect(lateEntryFor("2026-07-10T12:00:00.000Z", "2026-07-12T12:00:00.000Z")).toBe(true);
-    expect(lateEntryFor("2026-07-10T12:00:00.000Z", "2026-07-10T13:00:00.000Z")).toBe(false);
+  it("allows the following workspace calendar day before marking an entry late", () => {
+    expect(
+      lateEntryFor(
+        "2026-07-10T05:01:00.000Z",
+        "2026-07-12T04:59:00.000Z",
+        "America/Chicago",
+      ),
+    ).toBe(false);
+    expect(
+      lateEntryFor(
+        "2026-07-10T05:01:00.000Z",
+        "2026-07-12T05:01:00.000Z",
+        "America/Chicago",
+      ),
+    ).toBe(true);
   });
 
   it("validates and shifts local calendar dates without timezone drift", () => {

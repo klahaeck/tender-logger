@@ -352,7 +352,7 @@ test("owner can complete the auditable record lifecycle", async ({ page, request
   await expect(page.getByText("No report snapshots yet", { exact: true })).toBeVisible();
 });
 
-test("adds a record to a previous day and labels it as a late entry", async ({ page }) => {
+test("adds a record to the previous day without labeling it as a late entry", async ({ page }) => {
   const marker = Date.now().toString();
   const label = `Historical caregiving ${marker}`;
   await page.goto("/app");
@@ -365,7 +365,7 @@ test("adds a record to a previous day and labels it as a late entry", async ({ p
   await expect(page).toHaveURL(new RegExp(`date=${previous}`));
   await expect(page.getByRole("textbox", { name: "Log date", exact: true })).toHaveValue(previous);
   await expect(page.getByText("Historical day", { exact: true })).toBeVisible();
-  await expect(page.getByText(/labeled as late entries/i)).toBeVisible();
+  await expect(page.getByText(/following calendar day/i)).toBeVisible();
 
   await page.getByRole("button", { name: "Add record" }).click();
   await page.getByLabel("Activity").fill(label);
@@ -377,7 +377,7 @@ test("adds a record to a previous day and labels it as a late entry", async ({ p
   await page.goto("/app/timeline");
   await page.getByLabel("Search timeline").fill(label);
   const card = page.locator('[data-slot="card"]').filter({ hasText: label });
-  await expect(card.getByText("Late entry", { exact: true })).toBeVisible();
+  await expect(card.getByText("Late entry", { exact: true })).toHaveCount(0);
   await expect(card.getByText(/Occurred/)).toBeVisible();
   await expect(card.getByText(/Entered/)).toBeVisible();
 

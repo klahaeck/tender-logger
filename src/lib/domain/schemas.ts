@@ -54,6 +54,13 @@ export const careEntryCorrectionSchema = z.object({
   reason: z.string().trim().min(5).max(500),
 });
 
+export const careEntryUpdateSchema = careEntryCorrectionSchema.omit({ reason: true });
+
+export const careEntryTextUpdateSchema = z.object({
+  recordId: z.string().min(1),
+  notes: z.string().trim().min(1).max(2000),
+});
+
 export const appointmentSchema = z.object({
   childIds: idArray,
   title: z.string().trim().min(2).max(160),
@@ -198,6 +205,7 @@ export const purgeSchema = z.object({
 });
 
 export type CareEntryInput = z.infer<typeof careEntrySchema>;
+export type CareEntryUpdateInput = z.infer<typeof careEntryUpdateSchema>;
 export type CareEntryCorrectionInput = z.infer<typeof careEntryCorrectionSchema>;
 export type AppointmentInput = z.infer<typeof appointmentSchema>;
 export type IncidentInput = z.infer<typeof incidentSchema>;

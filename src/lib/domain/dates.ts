@@ -133,9 +133,12 @@ export function localDateTimeToUtc(value: string, timezone: string): string {
   return result.toISOString();
 }
 
-export function lateEntryFor(occurredAt: string, recordedAt: string): boolean {
-  return (
-    new Date(recordedAt).getTime() - new Date(occurredAt).getTime() >
-    24 * 60 * 60 * 1000
-  );
+export function lateEntryFor(
+  occurredAt: string,
+  recordedAt: string,
+  timezone: string,
+): boolean {
+  const occurredDate = localDateInTimezone(new Date(occurredAt), timezone);
+  const recordedDate = localDateInTimezone(new Date(recordedAt), timezone);
+  return shiftLocalDate(occurredDate, 1) < recordedDate;
 }

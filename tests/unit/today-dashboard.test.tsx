@@ -16,15 +16,17 @@ vi.mock("@/app/actions", () => ({
   correctCareEntryAction: vi.fn(),
   createCareEntryAction: vi.fn(),
   finalizeDailyLogAction: vi.fn(),
+  updateCareEntryAction: vi.fn(),
 }));
 
 vi.mock("@/lib/fetchers", () => ({
   fetchDashboard: vi.fn(),
 }));
 
-function renderDashboard() {
+function renderDashboard(status: "open" | "finalized" = "open") {
   const state = createSeedState(true);
   const dailyLog = state.dailyLogs[0];
+  dailyLog.status = status;
   const template = state.templates[0];
   const tasks = template.items.map((item) => ({
     ...item,
@@ -66,7 +68,7 @@ function renderDashboard() {
 }
 
 describe("TodayDashboard", () => {
-  it("opens a completed routine item with its existing values", () => {
+  it("opens an unfinalized routine item as a normal edit", () => {
     const { tasks } = renderDashboard();
     const completed = tasks.find((task) => task.entry);
     if (!completed?.entry) throw new Error("Expected a completed seed routine");
@@ -76,7 +78,19 @@ describe("TodayDashboard", () => {
     expect(screen.getByRole("heading", { name: `Change ${completed.label}` })).toBeInTheDocument();
     expect(screen.getByLabelText("Factual notes (optional)")).toHaveValue(completed.entry.notes);
     expect(screen.getByRole("checkbox", { name: /Parent A/ })).toBeChecked();
+    expect(screen.queryByLabelText("Reason for change")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Save changes" })).toBeEnabled();
+  });
+
+  it("requires a correction reason after the day is finalized", () => {
+    const { tasks } = renderDashboard("finalized");
+    const completed = tasks.find((task) => task.entry);
+    if (!completed?.entry) throw new Error("Expected a completed seed routine");
+
+    fireEvent.click(screen.getByRole("button", { name: `Change ${completed.label}` }));
+
     expect(screen.getByLabelText("Reason for change")).toBeRequired();
+    expect(screen.getByRole("button", { name: "Save correction" })).toBeEnabled();
   });
 
   it("does not preselect a caregiver for an unrecorded routine item", () => {

@@ -89,7 +89,7 @@ export function TimelineView({ initialData, canPurge = false }: { initialData: T
                     </div>
                     <div className="flex items-center gap-1">
                       <RevisionHistoryDialog revisions={revisions} timezone={data.workspace.timezone} />
-                      {item.description && <CorrectionDialog recordType={(item.kind === "care" ? "care_entry" : item.kind) as RecordType} recordId={item.id} currentText={item.description} />}
+                      {item.description && <CorrectionDialog recordType={(item.kind === "care" ? "care_entry" : item.kind) as RecordType} recordId={item.id} currentText={item.description} mode={item.kind === "care" && item.dailyLogStatus === "open" ? "edit" : "correct"} />}
                       {canPurge && <PurgeDialog recordType={(item.kind === "care" ? "care_entry" : item.kind) as RecordType} recordId={item.id} />}
                     </div>
                   </div>

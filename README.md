@@ -8,11 +8,11 @@ It is a recordkeeping tool, not legal advice, an emergency service, or a guarant
 
 - Per-child daily routine templates and a fast “Today” checklist
 - An isolated private workspace for every authenticated owner account
-- Previous-day navigation with historical templates, future-date prevention, and visible late-entry timestamps
+- Previous-day navigation with historical templates, future-date prevention, and a next-calendar-day grace period before late-entry labeling
 - Caregiver attribution, actual occurrence time, duration, outcomes, and factual notes
 - Scheduled appointments with responsibility and attendance outcomes
 - Neutral incident records for safety hazards and concerning interactions
-- Append-only revision history with canonical SHA-256 hashes
+- Direct care-record edits while a day is open, then append-only corrections after finalization
 - Server-controlled entry timestamps and visible late-entry labels
 - Private JPEG, PNG, HEIC, and PDF attachments with file-signature validation
 - Searchable combined timeline and authorized attachment downloads
@@ -59,7 +59,7 @@ Vercel Workflows use the deployment’s managed workflow backend automatically. 
 
 ## Data integrity model
 
-Saved records are never silently overwritten. A correction creates a new revision containing the previous revision ID, reason, author, server timestamp, and a hash of the canonical payload plus the previous hash. Reports capture the included revision and attachment IDs at creation time.
+Care records are editable while their daily log is open. Finalization locks the current revision; later changes create a new correction containing the previous revision ID, reason, author, server timestamp, and a hash of the canonical payload plus the previous hash. Reports capture the included revision and attachment IDs at creation time.
 
 The integrity controls are tamper-evident application safeguards, not a claim that the system is tamper-proof or that a report is self-authenticating. Export packages include the underlying manifest and checksums so an attorney can evaluate and preserve them with the originals.
 

@@ -208,6 +208,7 @@ export interface AuditEvent {
   actorId: string;
   action:
     | "created"
+    | "updated"
     | "corrected"
     | "finalized"
     | "invited"
@@ -287,6 +288,7 @@ export interface TimelineItem {
   caregiverIds: string[];
   status: string;
   lateEntry?: boolean;
+  dailyLogStatus?: DailyLog["status"];
   currentRevisionId: string;
 }
 

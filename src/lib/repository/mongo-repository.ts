@@ -27,6 +27,7 @@ import type {
   AppointmentInput,
   CareEntryCorrectionInput,
   CareEntryInput,
+  CareEntryUpdateInput,
   CorrectionInput,
   IncidentInput,
   ReportInput,
@@ -39,6 +40,7 @@ import {
   recordPayload,
   requireOwner,
   toTimelineItems,
+  withCurrentLateEntryStatus,
 } from "./helpers";
 import { toPlainData } from "./to-plain-data";
 import type {
@@ -142,7 +144,7 @@ export class MongoParentingRepository implements ParentingRepository {
   }
 
   async getDashboard(context: RequestContext, date: string) {
-    const [children, caregivers, entries] = await Promise.all([
+    const [children, caregivers, storedEntries] = await Promise.all([
       (await col<Child>("children"))
         .find({ workspaceId: context.workspace.id, active: true })
         .sort({ sortOrder: 1 })
@@ -155,6 +157,9 @@ export class MongoParentingRepository implements ParentingRepository {
         .sort({ occurredAt: -1 })
         .toArray(),
     ]);
+    const entries = storedEntries.map((entry) =>
+      withCurrentLateEntryStatus(entry, context.workspace.timezone),
+    );
     const dailyLog = await this.ensureDailyLog(context, date);
     const dailyTemplate = await (await col<RoutineTemplate>("routineTemplates")).findOne({
       workspaceId: context.workspace.id,
@@ -190,7 +195,7 @@ export class MongoParentingRepository implements ParentingRepository {
   }
 
   async getTimeline(context: RequestContext) {
-    const [children, caregivers, allEntries, appointments, incidents, attachments, revisions, finalizedLogs] = await Promise.all([
+    const [children, caregivers, allEntries, appointments, incidents, attachments, revisions, dailyLogs] = await Promise.all([
       (await col<Child>("children")).find({ workspaceId: context.workspace.id }).toArray(),
       (await col<Caregiver>("caregivers")).find({ workspaceId: context.workspace.id }).toArray(),
       (await col<CareEntry>("careEntries")).find({ workspaceId: context.workspace.id }).toArray(),
@@ -198,15 +203,13 @@ export class MongoParentingRepository implements ParentingRepository {
       (await col<Incident>("incidents")).find({ workspaceId: context.workspace.id }).toArray(),
       (await col<Attachment>("attachments")).find({ workspaceId: context.workspace.id }).toArray(),
       (await col<RecordRevision>("recordRevisions")).find({ workspaceId: context.workspace.id }).toArray(),
-      context.member.role === "reviewer"
-        ? (await col<DailyLog>("dailyLogs"))
-            .find({ workspaceId: context.workspace.id, status: "finalized" })
-            .toArray()
-        : Promise.resolve([]),
+      (await col<DailyLog>("dailyLogs"))
+        .find({ workspaceId: context.workspace.id })
+        .toArray(),
     ]);
     const entries =
       context.member.role === "reviewer"
-        ? allEntries.filter((entry) => finalizedLogs.some((log) => log.id === entry.dailyLogId))
+        ? allEntries.filter((entry) => dailyLogs.some((log) => log.id === entry.dailyLogId && log.status === "finalized"))
         : allEntries;
     const visibleRecordIds = new Set([
       ...entries.map((entry) => entry.id),
@@ -217,7 +220,13 @@ export class MongoParentingRepository implements ParentingRepository {
       workspace: context.workspace,
       children,
       caregivers,
-      items: toTimelineItems({ entries, appointments, incidents }),
+      items: toTimelineItems({
+        entries,
+        appointments,
+        incidents,
+        dailyLogs,
+        timezone: context.workspace.timezone,
+      }),
       attachments: attachments.filter((attachment) => visibleRecordIds.has(attachment.recordId)),
       revisions: revisions.filter((revision) => visibleRecordIds.has(revision.recordId)),
     });
@@ -288,7 +297,17 @@ export class MongoParentingRepository implements ParentingRepository {
         .find({ workspaceId: context.workspace.id, recordType, recordId })
         .toArray(),
     ]);
-    return toPlainData({ record, revisions, attachments });
+    return toPlainData({
+      record:
+        recordType === "care_entry"
+          ? withCurrentLateEntryStatus(
+              record as CareEntry,
+              context.workspace.timezone,
+            )
+          : record,
+      revisions,
+      attachments,
+    });
   }
 
   async getReportSource(
@@ -335,6 +354,12 @@ export class MongoParentingRepository implements ParentingRepository {
       caregivers: settings.caregivers,
       entries: snapshot.filters.includeCare
         ? entries.filter((item) => withinReport(snapshot, item.occurredAt) && includesChild(item.childIds))
+            .map((entry) =>
+              withCurrentLateEntryStatus(
+                entry,
+                context.workspace.timezone,
+              ),
+            )
         : [],
       appointments: snapshot.filters.includeAppointments
         ? appointments.filter((item) => withinReport(snapshot, item.scheduledAt) && includesChild(item.childIds))
@@ -376,9 +401,11 @@ export class MongoParentingRepository implements ParentingRepository {
       notes: input.notes,
       currentRevisionId: revision.id,
       createdBy: context.member.id,
-      lateEntry:
-        lateEntryFor(input.occurredAt, recordedAt) ||
-        input.localDate < localDateInTimezone(new Date(recordedAt), context.workspace.timezone),
+      lateEntry: lateEntryFor(
+        input.occurredAt,
+        recordedAt,
+        context.workspace.timezone,
+      ),
     };
     await this.transaction(async (session) => {
       await (await col<CareEntry>("careEntries")).insertOne(entry, { session });
@@ -388,6 +415,102 @@ export class MongoParentingRepository implements ParentingRepository {
     return toPlainData(entry);
   }
 
+  async updateCareEntry(context: RequestContext, input: CareEntryUpdateInput) {
+    requireOwner(context.member.role);
+    const entry = await (await col<CareEntry>("careEntries")).findOne({
+      id: input.recordId,
+      workspaceId: context.workspace.id,
+    });
+    if (!entry) throw new Error("NOT_FOUND");
+    if (entry.taskKey === "time_together" && !input.durationMinutes) {
+      throw new Error("DURATION_REQUIRED");
+    }
+    const revision = await (await col<RecordRevision>("recordRevisions")).findOne({
+      id: entry.currentRevisionId,
+      workspaceId: context.workspace.id,
+    });
+    if (!revision) throw new Error("REVISION_NOT_FOUND");
+    const previousRevision = revision.previousRevisionId
+      ? await (await col<RecordRevision>("recordRevisions")).findOne({
+          id: revision.previousRevisionId,
+          workspaceId: context.workspace.id,
+        })
+      : undefined;
+    if (revision.previousRevisionId && !previousRevision) {
+      throw new Error("REVISION_NOT_FOUND");
+    }
+
+    const savedAt = new Date().toISOString();
+    const occurredAt = new Date(input.occurredAt).toISOString();
+    const update = {
+      childIds: input.childIds,
+      caregiverIds: input.caregiverIds,
+      status: input.status,
+      durationMinutes: input.durationMinutes,
+      activityType: input.activityType,
+      notes: input.notes,
+    };
+    const payload = { ...revision.payload, ...update, occurredAt };
+    const optionalFields = ["durationMinutes", "activityType", "notes"] as const;
+    for (const field of optionalFields) {
+      if (update[field] === undefined) delete payload[field];
+    }
+    const hash = createRevisionHash({
+      payload,
+      previousHash: previousRevision?.hash,
+      authorId: context.member.id,
+      recordedAt: savedAt,
+    });
+    const lateEntry = lateEntryFor(
+      occurredAt,
+      entry.recordedAt,
+      context.workspace.timezone,
+    );
+    const setFields: Record<string, unknown> = {
+      childIds: update.childIds,
+      caregiverIds: update.caregiverIds,
+      status: update.status,
+      occurredAt,
+      lateEntry,
+    };
+    const unsetFields: Record<string, ""> = {};
+    for (const field of optionalFields) {
+      if (update[field] === undefined) unsetFields[field] = "";
+      else setFields[field] = update[field];
+    }
+
+    await this.transaction(async (session) => {
+      const openLog = await (await col<DailyLog>("dailyLogs")).updateOne(
+        {
+          id: entry.dailyLogId,
+          workspaceId: context.workspace.id,
+          status: "open",
+        },
+        { $set: { status: "open" } },
+        { session },
+      );
+      if (!openLog.matchedCount) throw new Error("DAY_FINALIZED");
+      await (await col<RecordRevision>("recordRevisions")).updateOne(
+        { id: revision.id, workspaceId: context.workspace.id },
+        { $set: { payload, authorId: context.member.id, recordedAt: savedAt, hash } },
+        { session },
+      );
+      await (await col<CareEntry>("careEntries")).updateOne(
+        { id: entry.id, workspaceId: context.workspace.id },
+        {
+          $set: setFields,
+          ...(Object.keys(unsetFields).length ? { $unset: unsetFields } : {}),
+        },
+        { session },
+      );
+      await this.insertAudit(context, "updated", "care_entry", entry.id, session, {
+        revisionNumber: revision.revisionNumber,
+      });
+    });
+
+    return toPlainData({ ...entry, ...update, occurredAt, lateEntry });
+  }
+
   async correctCareEntry(context: RequestContext, input: CareEntryCorrectionInput) {
     requireOwner(context.member.role);
     const entry = await (await col<CareEntry>("careEntries")).findOne({
@@ -395,6 +518,12 @@ export class MongoParentingRepository implements ParentingRepository {
       workspaceId: context.workspace.id,
     });
     if (!entry) throw new Error("NOT_FOUND");
+    const dailyLog = await (await col<DailyLog>("dailyLogs")).findOne({
+      id: entry.dailyLogId,
+      workspaceId: context.workspace.id,
+    });
+    if (!dailyLog) throw new Error("NOT_FOUND");
+    if (dailyLog.status !== "finalized") throw new Error("DAY_NOT_FINALIZED");
     if (entry.taskKey === "time_together" && !input.durationMinutes) {
       throw new Error("DURATION_REQUIRED");
     }
@@ -434,7 +563,11 @@ export class MongoParentingRepository implements ParentingRepository {
         recordedAt,
       }),
     };
-    const lateEntry = entry.lateEntry || lateEntryFor(occurredAt, entry.recordedAt);
+    const lateEntry = lateEntryFor(
+      occurredAt,
+      entry.recordedAt,
+      context.workspace.timezone,
+    );
     const optionalFields = ["durationMinutes", "activityType", "notes"] as const;
     const setFields: Record<string, unknown> = {
       childIds: correction.childIds,
@@ -522,6 +655,14 @@ export class MongoParentingRepository implements ParentingRepository {
     requireOwner(context.member.role);
     const bundle = await this.getRecordBundle(context, input.recordType, input.recordId);
     if (!bundle) throw new Error("NOT_FOUND");
+    if (input.recordType === "care_entry") {
+      const dailyLog = await (await col<DailyLog>("dailyLogs")).findOne({
+        id: (bundle.record as CareEntry).dailyLogId,
+        workspaceId: context.workspace.id,
+      });
+      if (!dailyLog) throw new Error("NOT_FOUND");
+      if (dailyLog.status !== "finalized") throw new Error("DAY_NOT_FINALIZED");
+    }
     const previous = bundle.revisions.at(-1);
     if (!previous) throw new Error("REVISION_NOT_FOUND");
     const recordedAt = new Date().toISOString();

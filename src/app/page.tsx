@@ -64,7 +64,7 @@ const securityPoints = [
   { icon: UserCheck, title: "Access stays intentional", description: "Owners and invited reviewers sign in before reaching family records." },
   { icon: Paperclip, title: "Files stay behind the app", description: "Attachments and generated reports are delivered through authenticated routes, never public links." },
   { icon: ShieldCheck, title: "Workspace boundaries", description: "Each account receives an isolated workspace, with membership and role checks repeated for every private request." },
-  { icon: History, title: "Tamper-evident history", description: "Server timestamps, append-only revisions, and linked hashes make quiet changes easier to detect." },
+  { icon: History, title: "Tamper-evident history", description: "Finalized records use server timestamps, append-only corrections, and linked hashes to make later changes easier to detect." },
 ];
 
 export default async function MarketingHome() {
