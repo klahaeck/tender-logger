@@ -23,15 +23,67 @@ vi.mock("@/lib/fetchers", () => ({
   fetchDashboard: vi.fn(),
 }));
 
-function renderDashboard(status: "open" | "finalized" = "open") {
+function renderDashboard(
+  status: "open" | "finalized" = "open",
+  specialArrangement = false,
+) {
   const state = createSeedState(true);
   const dailyLog = state.dailyLogs[0];
   dailyLog.status = status;
   const template = state.templates[0];
-  const tasks = template.items.map((item) => ({
+  let tasks: DashboardData["tasks"] = template.items.map((item) => ({
     ...item,
+    source: "routine" as const,
+    templateItemId: item.id,
+    plannedCaregiverIds: [],
     entry: state.careEntries.find((entry) => entry.templateItemId === item.id),
   }));
+  const arrangement = specialArrangement
+    ? {
+        id: "arrangement_day",
+        workspaceId: state.workspace.id,
+        seriesId: "arrangement_series",
+        dailyLogId: dailyLog.id,
+        localDate: dailyLog.localDate,
+        title: "Camping weekend",
+        status: "active" as const,
+        assignments: [
+          {
+            childId: state.children[0].id,
+            caregiverIds: [state.caregivers[1].id],
+          },
+        ],
+        tasks: [
+          {
+            id: "arrangement_task",
+            taskKey: "prepare_breakfast" as const,
+            childId: state.children[0].id,
+            label: "Camp breakfast",
+            suggestedTime: "08:00",
+            sortOrder: 1,
+          },
+        ],
+        currentRevisionId: "arrangement_revision",
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        createdBy: state.members[0].id,
+      }
+    : undefined;
+  if (arrangement) {
+    tasks = arrangement.tasks.map((task) => ({
+      id: task.id,
+      source: "special_arrangement" as const,
+      arrangementTaskId: task.id,
+      taskKey: task.taskKey,
+      label: task.label,
+      childIds: [task.childId],
+      weekdays: [0, 1, 2, 3, 4, 5, 6],
+      suggestedTime: task.suggestedTime,
+      sortOrder: task.sortOrder,
+      active: true,
+      plannedCaregiverIds: arrangement.assignments[0].caregiverIds,
+    }));
+  }
   const completedCount = tasks.filter(
     (task) => task.entry?.status === "completed" || task.entry?.status === "not_applicable",
   ).length;
@@ -43,6 +95,7 @@ function renderDashboard(status: "open" | "finalized" = "open") {
     children: state.children,
     caregivers: state.caregivers,
     tasks,
+    specialArrangement: arrangement,
     completion: {
       completed: completedCount,
       total: tasks.length,
@@ -103,5 +156,15 @@ describe("TodayDashboard", () => {
     expect(screen.getByRole("checkbox", { name: /Parent A/ })).not.toBeChecked();
     expect(screen.getByRole("checkbox", { name: /Parent B/ })).not.toBeChecked();
     expect(screen.getByRole("button", { name: "Save record" })).toBeDisabled();
+  });
+
+  it("prefills the planned caregiver for a special-arrangement task", () => {
+    renderDashboard("open", true);
+
+    fireEvent.click(screen.getByRole("button", { name: "Record Camp breakfast" }));
+
+    expect(screen.getByRole("checkbox", { name: /Parent A/ })).not.toBeChecked();
+    expect(screen.getByRole("checkbox", { name: /Parent B/ })).toBeChecked();
+    expect(screen.getByRole("button", { name: "Save record" })).toBeEnabled();
   });
 });

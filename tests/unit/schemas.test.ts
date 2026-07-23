@@ -5,6 +5,8 @@ import {
   careEntrySchema,
   incidentSchema,
   reportSchema,
+  specialArrangementCorrectionSchema,
+  specialArrangementCreateSchema,
   workspaceSettingsSchema,
 } from "@/lib/domain/schemas";
 
@@ -114,5 +116,133 @@ describe("domain validation", () => {
       ...base,
       routineItems: [{ ...base.routineItems[0], weekdays: [7] }],
     }).success).toBe(false);
+  });
+
+  it("validates a complete special-arrangement range and correction reason", () => {
+    const arrangement = {
+      title: "Camping weekend",
+      startDate: "2026-07-24",
+      endDate: "2026-07-26",
+      assignments: [
+        { childId: "child_1", caregiverIds: ["caregiver_1"] },
+        { childId: "child_2", caregiverIds: ["caregiver_2"] },
+      ],
+      days: ["2026-07-24", "2026-07-25", "2026-07-26"].map(
+        (localDate) => ({
+          localDate,
+          tasks: [
+            {
+              taskKey: "custom",
+              childId: "child_1",
+              label: "Set up camp",
+              suggestedTime: "16:00",
+            },
+          ],
+        }),
+      ),
+    };
+
+    expect(specialArrangementCreateSchema.safeParse(arrangement).success).toBe(
+      true,
+    );
+    expect(
+      specialArrangementCorrectionSchema.safeParse({
+        recordId: "arrangement_1",
+        title: arrangement.title,
+        status: "active",
+        assignments: arrangement.assignments,
+        tasks: arrangement.days[0].tasks,
+        reason: "Fixed the planned caregiver.",
+      }).success,
+    ).toBe(true);
+  });
+
+  it("rejects incomplete, overlong, or ambiguous special arrangements", () => {
+    const base = {
+      title: "Camping weekend",
+      startDate: "2026-07-24",
+      endDate: "2026-07-26",
+      assignments: [
+        { childId: "child_1", caregiverIds: ["caregiver_1"] },
+        { childId: "child_1", caregiverIds: ["caregiver_2"] },
+      ],
+      days: [
+        {
+          localDate: "2026-07-24",
+          tasks: [
+            {
+              taskKey: "custom",
+              childId: "child_missing",
+              label: "Set up camp",
+              suggestedTime: "16:00",
+            },
+          ],
+        },
+      ],
+    };
+
+    expect(specialArrangementCreateSchema.safeParse(base).success).toBe(false);
+    expect(
+      specialArrangementCreateSchema.safeParse({
+        ...base,
+        startDate: "2026-02-30",
+        endDate: "2026-02-30",
+      }).success,
+    ).toBe(false);
+    expect(
+      specialArrangementCreateSchema.safeParse({
+        ...base,
+        assignments: [],
+      }).success,
+    ).toBe(false);
+    expect(
+      specialArrangementCreateSchema.safeParse({
+        ...base,
+        assignments: [
+          {
+            childId: "child_1",
+            caregiverIds: ["caregiver_1", "caregiver_1"],
+          },
+        ],
+      }).success,
+    ).toBe(false);
+    expect(
+      specialArrangementCreateSchema.safeParse({
+        ...base,
+        assignments: [{ childId: "child_1", caregiverIds: ["caregiver_1"] }],
+        startDate: "2026-07-24",
+        endDate: "2026-07-24",
+        days: [
+          {
+            localDate: "2026-07-24",
+            tasks: [
+              {
+                taskKey: "custom",
+                childId: "child_1",
+                label: "x",
+                suggestedTime: "25:00",
+              },
+            ],
+          },
+        ],
+      }).success,
+    ).toBe(false);
+    expect(
+      specialArrangementCreateSchema.safeParse({
+        ...base,
+        assignments: [{ childId: "child_1", caregiverIds: ["caregiver_1"] }],
+        endDate: "2026-08-30",
+      }).success,
+    ).toBe(false);
+    expect(
+      specialArrangementCorrectionSchema.safeParse({
+        recordId: "arrangement_1",
+        title: "Camping weekend",
+        status: "active",
+        assignments: [{ childId: "child_1", caregiverIds: ["caregiver_1"] }],
+        tasks: [],
+        reason: "no",
+      }).success,
+    ).toBe(false);
   });
 });

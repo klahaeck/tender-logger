@@ -3,7 +3,11 @@ import "server-only";
 import type { ClientSession, Collection, Document } from "mongodb";
 
 import { collection, ensureMongoIndexes, getMongoClient } from "@/lib/db/mongodb";
-import { lateEntryFor, localDateInTimezone } from "@/lib/domain/dates";
+import {
+  lateEntryFor,
+  localDateInTimezone,
+  weekdayForLocalDate,
+} from "@/lib/domain/dates";
 import { createAuditHash, createRevisionHash, id } from "@/lib/domain/integrity";
 import type {
   Appointment,
@@ -18,9 +22,12 @@ import type {
   PurgeTombstone,
   RecordRevision,
   RecordType,
+  RevisionRecordType,
   ReportSnapshot,
   RoutineTemplate,
+  SpecialArrangementDay,
   SettingsData,
+  TodayTask,
   Workspace,
 } from "@/lib/domain/types";
 import type {
@@ -31,11 +38,16 @@ import type {
   CorrectionInput,
   IncidentInput,
   ReportInput,
+  SpecialArrangementCorrectionInput,
+  SpecialArrangementCreateInput,
+  SpecialArrangementUpdateInput,
   WorkspaceSettingsInput,
 } from "@/lib/domain/schemas";
 import type { Identity } from "@/lib/auth/identity";
 import { createSeedState } from "./seed";
 import {
+  arrangementAtIncludedRevision,
+  arrangementForChildren,
   createNextRoutineItems,
   recordPayload,
   requireOwner,
@@ -59,6 +71,91 @@ async function col<T>(name: string): Promise<Collection<AppDocument<T>>> {
 function withinReport(report: ReportSnapshot, dateTime: string): boolean {
   const date = dateTime.slice(0, 10);
   return date >= report.filters.from && date <= report.filters.to;
+}
+
+function arrangementPayload(
+  arrangement: Pick<
+    SpecialArrangementDay,
+    | "localDate"
+    | "title"
+    | "note"
+    | "status"
+    | "assignments"
+    | "tasks"
+    | "updatedAt"
+  >,
+): Record<string, unknown> {
+  return JSON.parse(JSON.stringify(arrangement)) as Record<string, unknown>;
+}
+
+function normalizeArrangementFields(
+  input: Pick<
+    SpecialArrangementUpdateInput,
+    "title" | "note" | "status" | "assignments" | "tasks"
+  >,
+  references: {
+    childIds: Set<string>;
+    caregiverIds: Set<string>;
+    routineIds: Set<string>;
+  },
+  current?: SpecialArrangementDay,
+) {
+  const assignmentIds = new Set(input.assignments.map((assignment) => assignment.childId));
+  if (
+    input.assignments.length !== references.childIds.size ||
+    assignmentIds.size !== references.childIds.size ||
+    [...references.childIds].some((childId) => !assignmentIds.has(childId))
+  ) {
+    throw new Error("INVALID_ARRANGEMENT_CHILDREN");
+  }
+  if (
+    input.assignments.some((assignment) =>
+      assignment.caregiverIds.length === 0 ||
+      new Set(assignment.caregiverIds).size !== assignment.caregiverIds.length ||
+      assignment.caregiverIds.some(
+        (caregiverId) => !references.caregiverIds.has(caregiverId),
+      ),
+    )
+  ) {
+    throw new Error("INVALID_ARRANGEMENT_CAREGIVER");
+  }
+  const currentTaskIds = new Set(current?.tasks.map((task) => task.id) ?? []);
+  const submittedTaskIds = new Set<string>();
+  const tasks = input.tasks.map((task, index) => {
+    if (!references.childIds.has(task.childId)) {
+      throw new Error("INVALID_ARRANGEMENT_TASK");
+    }
+    if (
+      task.sourceRoutineItemId &&
+      !references.routineIds.has(task.sourceRoutineItemId)
+    ) {
+      throw new Error("INVALID_ROUTINE_ITEM");
+    }
+    if (task.id && (!currentTaskIds.has(task.id) || submittedTaskIds.has(task.id))) {
+      throw new Error("INVALID_ARRANGEMENT_TASK");
+    }
+    const taskId = task.id ?? id("arrangement_task");
+    submittedTaskIds.add(taskId);
+    return {
+      id: taskId,
+      sourceRoutineItemId: task.sourceRoutineItemId,
+      taskKey: task.taskKey,
+      childId: task.childId,
+      label: task.label,
+      suggestedTime: task.suggestedTime,
+      sortOrder: index + 1,
+    };
+  });
+  return {
+    title: input.title,
+    note: input.note || undefined,
+    status: input.status,
+    assignments: input.assignments.map((assignment) => ({
+      childId: assignment.childId,
+      caregiverIds: [...assignment.caregiverIds],
+    })),
+    tasks,
+  };
 }
 
 export class MongoParentingRepository implements ParentingRepository {
@@ -167,13 +264,41 @@ export class MongoParentingRepository implements ParentingRepository {
     });
     if (!dailyTemplate) throw new Error("ROUTINE_TEMPLATE_NOT_FOUND");
     const dayEntries = entries.filter((entry) => entry.dailyLogId === dailyLog.id);
-    const weekday = new Date(`${date}T12:00:00`).getDay();
-    const tasks = dailyTemplate.items
-      .filter((item) => item.active && item.weekdays.includes(weekday))
-      .map((item) => ({
-        ...item,
-        entry: dayEntries.find((entry) => entry.templateItemId === item.id),
-      }));
+    const specialArrangement = await (
+      await col<SpecialArrangementDay>("specialArrangementDays")
+    ).findOne({
+      workspaceId: context.workspace.id,
+      dailyLogId: dailyLog.id,
+      status: "active",
+    });
+    const weekday = weekdayForLocalDate(date);
+    const tasks: TodayTask[] = specialArrangement
+      ? specialArrangement.tasks.map((task) => ({
+          id: task.id,
+          source: "special_arrangement",
+          arrangementTaskId: task.id,
+          taskKey: task.taskKey,
+          label: task.label,
+          childIds: [task.childId],
+          weekdays: [weekday],
+          suggestedTime: task.suggestedTime,
+          sortOrder: task.sortOrder,
+          active: true,
+          plannedCaregiverIds:
+            specialArrangement.assignments.find(
+              (assignment) => assignment.childId === task.childId,
+            )?.caregiverIds ?? [],
+          entry: dayEntries.find((entry) => entry.arrangementTaskId === task.id),
+        }))
+      : dailyTemplate.items
+          .filter((item) => item.active && item.weekdays.includes(weekday))
+          .map((item) => ({
+            ...item,
+            source: "routine" as const,
+            templateItemId: item.id,
+            plannedCaregiverIds: [],
+            entry: dayEntries.find((entry) => entry.templateItemId === item.id),
+          }));
     const completed = tasks.filter(
       (task) => task.entry?.status === "completed" || task.entry?.status === "not_applicable",
     ).length;
@@ -185,6 +310,7 @@ export class MongoParentingRepository implements ParentingRepository {
       children,
       caregivers,
       tasks,
+      specialArrangement: specialArrangement ?? undefined,
       completion: {
         completed,
         total: tasks.length,
@@ -273,6 +399,43 @@ export class MongoParentingRepository implements ParentingRepository {
     return toPlainData({ workspace: context.workspace, members, children, caregivers, template });
   }
 
+  async getSpecialArrangements(context: RequestContext) {
+    requireOwner(context.member.role);
+    const [children, caregivers, template, days, dailyLogs] = await Promise.all([
+      (await col<Child>("children"))
+        .find({ workspaceId: context.workspace.id, active: true })
+        .sort({ sortOrder: 1 })
+        .toArray(),
+      (await col<Caregiver>("caregivers"))
+        .find({ workspaceId: context.workspace.id, active: true })
+        .toArray(),
+      (await col<RoutineTemplate>("routineTemplates")).findOne(
+        { workspaceId: context.workspace.id },
+        { sort: { version: -1 } },
+      ),
+      (await col<SpecialArrangementDay>("specialArrangementDays"))
+        .find({ workspaceId: context.workspace.id })
+        .sort({ localDate: -1 })
+        .toArray(),
+      (await col<DailyLog>("dailyLogs"))
+        .find({ workspaceId: context.workspace.id })
+        .toArray(),
+    ]);
+    if (!template) throw new Error("ROUTINE_TEMPLATE_NOT_FOUND");
+    return toPlainData({
+      workspace: context.workspace,
+      children,
+      caregivers,
+      template,
+      days: days.map((arrangement) => ({
+        ...arrangement,
+        dailyLogStatus: dailyLogs.find(
+          (log) => log.id === arrangement.dailyLogId,
+        )?.status,
+      })),
+    });
+  }
+
   async getRecordBundle(
     context: RequestContext,
     recordType: RecordType,
@@ -319,7 +482,16 @@ export class MongoParentingRepository implements ParentingRepository {
       workspaceId: context.workspace.id,
     });
     if (!snapshot) return null;
-    const [settings, children, entries, appointments, incidents, revisions, attachments] =
+    const [
+      settings,
+      children,
+      entries,
+      appointments,
+      incidents,
+      arrangements,
+      revisions,
+      attachments,
+    ] =
       await Promise.all([
         this.getSettings(context),
         (await col<Child>("children"))
@@ -331,6 +503,9 @@ export class MongoParentingRepository implements ParentingRepository {
           .toArray(),
         this.getAppointments(context),
         this.getIncidents(context),
+        (await col<SpecialArrangementDay>("specialArrangementDays"))
+          .find({ workspaceId: context.workspace.id })
+          .toArray(),
         (await col<RecordRevision>("recordRevisions"))
           .find({
             workspaceId: context.workspace.id,
@@ -367,6 +542,17 @@ export class MongoParentingRepository implements ParentingRepository {
       incidents: snapshot.filters.includeIncidents
         ? incidents.filter((item) => withinReport(snapshot, item.occurredAt) && includesChild(item.childIds))
         : [],
+      arrangements: arrangements
+        .map((arrangement) =>
+          arrangementAtIncludedRevision(arrangement, revisions),
+        )
+        .filter(
+          (arrangement): arrangement is SpecialArrangementDay =>
+            arrangement?.status === "active",
+        )
+        .map((arrangement) =>
+          arrangementForChildren(arrangement, snapshot.filters.childIds),
+        ),
       revisions,
       attachments,
     });
@@ -375,34 +561,59 @@ export class MongoParentingRepository implements ParentingRepository {
   async createCareEntry(context: RequestContext, input: CareEntryInput) {
     requireOwner(context.member.role);
     const log = await this.ensureDailyLog(context, input.localDate);
+    if (input.templateItemId && input.arrangementTaskId) {
+      throw new Error("INVALID_CARE_TASK");
+    }
+    const arrangement = input.arrangementTaskId
+      ? await (await col<SpecialArrangementDay>("specialArrangementDays")).findOne({
+          workspaceId: context.workspace.id,
+          dailyLogId: log.id,
+          status: "active",
+          "tasks.id": input.arrangementTaskId,
+        })
+      : null;
+    const arrangementTask = arrangement?.tasks.find(
+      (task) => task.id === input.arrangementTaskId,
+    );
+    if (input.arrangementTaskId && !arrangementTask) {
+      throw new Error("INVALID_ARRANGEMENT_TASK");
+    }
+    const normalizedInput = arrangementTask
+      ? {
+          ...input,
+          taskKey: arrangementTask.taskKey,
+          taskLabel: arrangementTask.label,
+        }
+      : input;
     const recordedAt = new Date().toISOString();
     const recordId = id("care");
     const revision = this.initialRevision(
       context,
       "care_entry",
       recordId,
-      { ...input },
+      { ...normalizedInput },
       recordedAt,
     );
     const entry: CareEntry = {
       id: recordId,
       workspaceId: context.workspace.id,
       dailyLogId: log.id,
-      templateItemId: input.templateItemId,
-      taskKey: input.taskKey,
-      taskLabel: input.taskLabel,
-      childIds: input.childIds,
-      caregiverIds: input.caregiverIds,
-      status: input.status,
-      occurredAt: new Date(input.occurredAt).toISOString(),
+      templateItemId: normalizedInput.templateItemId,
+      arrangementTaskId: normalizedInput.arrangementTaskId,
+      taskKey: normalizedInput.taskKey,
+      taskLabel: normalizedInput.taskLabel,
+      childIds: normalizedInput.childIds,
+      caregiverIds: normalizedInput.caregiverIds,
+      status: normalizedInput.status,
+      occurredAt: new Date(normalizedInput.occurredAt).toISOString(),
       recordedAt,
-      durationMinutes: input.durationMinutes,
-      activityType: input.activityType,
-      notes: input.notes,
+      durationMinutes: normalizedInput.durationMinutes,
+      activityType: normalizedInput.activityType,
+      notes: normalizedInput.notes,
       currentRevisionId: revision.id,
       createdBy: context.member.id,
       lateEntry: lateEntryFor(
-        input.occurredAt,
+        normalizedInput.occurredAt,
         recordedAt,
         context.workspace.timezone,
       ),
@@ -725,6 +936,257 @@ export class MongoParentingRepository implements ParentingRepository {
     });
   }
 
+  async createSpecialArrangement(
+    context: RequestContext,
+    input: SpecialArrangementCreateInput,
+  ) {
+    requireOwner(context.member.role);
+    const references = await this.getArrangementReferences(context);
+    const seriesId = id("arrangement_series");
+    const createdAt = new Date().toISOString();
+    const created: SpecialArrangementDay[] = [];
+    try {
+      await this.transaction(async (session) => {
+        const arrangements = await col<SpecialArrangementDay>(
+          "specialArrangementDays",
+        );
+        const conflict = await arrangements.findOne(
+          {
+            workspaceId: context.workspace.id,
+            localDate: { $in: input.days.map((day) => day.localDate) },
+          },
+          { session },
+        );
+        if (conflict) throw new Error("ARRANGEMENT_CONFLICT");
+        for (const day of [...input.days].sort((a, b) =>
+          a.localDate.localeCompare(b.localDate),
+        )) {
+          const dailyLog = await this.ensureDailyLog(context, day.localDate, session);
+          if (dailyLog.status !== "open") throw new Error("DAY_FINALIZED");
+          const fields = normalizeArrangementFields(
+            {
+              title: input.title,
+              note: input.note,
+              status: "active",
+              assignments: input.assignments,
+              tasks: day.tasks,
+            },
+            references,
+          );
+          const recordId = id("arrangement");
+          const base = {
+            id: recordId,
+            workspaceId: context.workspace.id,
+            seriesId,
+            dailyLogId: dailyLog.id,
+            localDate: day.localDate,
+            ...fields,
+            createdAt,
+            updatedAt: createdAt,
+            createdBy: context.member.id,
+          };
+          const revision = this.initialRevision(
+            context,
+            "special_arrangement",
+            recordId,
+            arrangementPayload(base),
+            createdAt,
+          );
+          const arrangement: SpecialArrangementDay = {
+            ...base,
+            currentRevisionId: revision.id,
+          };
+          await arrangements.insertOne(arrangement, { session });
+          await (await col<RecordRevision>("recordRevisions")).insertOne(revision, {
+            session,
+          });
+          await this.insertAudit(
+            context,
+            "created",
+            "special_arrangement",
+            recordId,
+            session,
+            { localDate: day.localDate },
+          );
+          created.push(arrangement);
+        }
+      });
+    } catch (error) {
+      if (
+        (error instanceof Error && error.message === "ARRANGEMENT_CONFLICT") ||
+        (typeof error === "object" &&
+          error !== null &&
+          "code" in error &&
+          error.code === 11000)
+      ) {
+        throw new Error("ARRANGEMENT_CONFLICT");
+      }
+      throw error;
+    }
+    return toPlainData(created);
+  }
+
+  async updateSpecialArrangement(
+    context: RequestContext,
+    input: SpecialArrangementUpdateInput,
+  ) {
+    requireOwner(context.member.role);
+    const arrangements = await col<SpecialArrangementDay>(
+      "specialArrangementDays",
+    );
+    const arrangement = await arrangements.findOne({
+      id: input.recordId,
+      workspaceId: context.workspace.id,
+    });
+    if (!arrangement) throw new Error("NOT_FOUND");
+    const references = await this.getArrangementReferences(context);
+    const fields = normalizeArrangementFields(input, references, arrangement);
+    const revision = await (await col<RecordRevision>("recordRevisions")).findOne({
+      id: arrangement.currentRevisionId,
+      workspaceId: context.workspace.id,
+    });
+    if (!revision) throw new Error("REVISION_NOT_FOUND");
+    const updatedAt = new Date().toISOString();
+    const payload = arrangementPayload({
+      localDate: arrangement.localDate,
+      ...fields,
+      updatedAt,
+    });
+    const hash = createRevisionHash({
+      payload,
+      authorId: context.member.id,
+      recordedAt: updatedAt,
+    });
+    await this.transaction(async (session) => {
+      const openLog = await (await col<DailyLog>("dailyLogs")).updateOne(
+        {
+          id: arrangement.dailyLogId,
+          workspaceId: context.workspace.id,
+          status: "open",
+        },
+        { $set: { status: "open" } },
+        { session },
+      );
+      if (!openLog.matchedCount) throw new Error("DAY_FINALIZED");
+      await (await col<RecordRevision>("recordRevisions")).updateOne(
+        { id: revision.id, workspaceId: context.workspace.id },
+        {
+          $set: {
+            payload,
+            authorId: context.member.id,
+            recordedAt: updatedAt,
+            hash,
+          },
+        },
+        { session },
+      );
+      const arrangementResult = await arrangements.updateOne(
+        {
+          id: arrangement.id,
+          workspaceId: context.workspace.id,
+          currentRevisionId: revision.id,
+        },
+        { $set: { ...fields, updatedAt } },
+        { session },
+      );
+      if (!arrangementResult.matchedCount) {
+        throw new Error("ARRANGEMENT_CONFLICT");
+      }
+      await this.insertAudit(
+        context,
+        "updated",
+        "special_arrangement",
+        arrangement.id,
+        session,
+        { revisionNumber: revision.revisionNumber },
+      );
+    });
+    return toPlainData({ ...arrangement, ...fields, updatedAt });
+  }
+
+  async correctSpecialArrangement(
+    context: RequestContext,
+    input: SpecialArrangementCorrectionInput,
+  ) {
+    requireOwner(context.member.role);
+    const arrangements = await col<SpecialArrangementDay>(
+      "specialArrangementDays",
+    );
+    const arrangement = await arrangements.findOne({
+      id: input.recordId,
+      workspaceId: context.workspace.id,
+    });
+    if (!arrangement) throw new Error("NOT_FOUND");
+    const finalizedLog = await (await col<DailyLog>("dailyLogs")).findOne({
+      id: arrangement.dailyLogId,
+      workspaceId: context.workspace.id,
+      status: "finalized",
+    });
+    if (!finalizedLog) throw new Error("DAY_NOT_FINALIZED");
+    const previous = await (await col<RecordRevision>("recordRevisions")).findOne({
+      id: arrangement.currentRevisionId,
+      workspaceId: context.workspace.id,
+    });
+    if (!previous) throw new Error("REVISION_NOT_FOUND");
+    const references = await this.getArrangementReferences(context);
+    const fields = normalizeArrangementFields(input, references, arrangement);
+    const recordedAt = new Date().toISOString();
+    const payload = arrangementPayload({
+      localDate: arrangement.localDate,
+      ...fields,
+      updatedAt: recordedAt,
+    });
+    const revision: RecordRevision = {
+      id: id("rev"),
+      workspaceId: context.workspace.id,
+      recordType: "special_arrangement",
+      recordId: arrangement.id,
+      previousRevisionId: previous.id,
+      revisionNumber: previous.revisionNumber + 1,
+      payload,
+      reason: input.reason,
+      authorId: context.member.id,
+      recordedAt,
+      hash: createRevisionHash({
+        payload,
+        previousHash: previous.hash,
+        authorId: context.member.id,
+        recordedAt,
+      }),
+    };
+    await this.transaction(async (session) => {
+      await (await col<RecordRevision>("recordRevisions")).insertOne(revision, {
+        session,
+      });
+      const result = await arrangements.updateOne(
+        {
+          id: arrangement.id,
+          workspaceId: context.workspace.id,
+          currentRevisionId: previous.id,
+        },
+        {
+          $set: {
+            ...fields,
+            updatedAt: recordedAt,
+            currentRevisionId: revision.id,
+          },
+        },
+        { session },
+      );
+      if (!result.matchedCount) throw new Error("ARRANGEMENT_CONFLICT");
+      await this.insertAudit(
+        context,
+        "corrected",
+        "special_arrangement",
+        arrangement.id,
+        session,
+        { revisionNumber: revision.revisionNumber },
+        previous.hash,
+      );
+    });
+    return toPlainData(revision);
+  }
+
   async createReport(context: RequestContext, input: ReportInput) {
     requireOwner(context.member.role);
     const [timeline, finalizedLogs] = await Promise.all([
@@ -755,8 +1217,31 @@ export class MongoParentingRepository implements ParentingRepository {
       );
     });
     const recordIds = included.map((item) => item.id);
+    const finalizedLogIds = new Set(finalizedLogs.map((log) => log.id));
+    const arrangements = await (
+      await col<SpecialArrangementDay>("specialArrangementDays")
+    )
+      .find({
+        workspaceId: context.workspace.id,
+        status: "active",
+        localDate: { $gte: input.from, $lte: input.to },
+      })
+      .toArray();
+    const arrangementIds = arrangements
+      .filter(
+        (arrangement) =>
+          finalizedLogIds.has(arrangement.dailyLogId) &&
+          (input.childIds.length === 0 ||
+            arrangement.assignments.some((assignment) =>
+              input.childIds.includes(assignment.childId),
+            )),
+      )
+      .map((arrangement) => arrangement.id);
     const revisions = await (await col<RecordRevision>("recordRevisions"))
-      .find({ workspaceId: context.workspace.id, recordId: { $in: recordIds } })
+      .find({
+        workspaceId: context.workspace.id,
+        recordId: { $in: [...recordIds, ...arrangementIds] },
+      })
       .toArray();
     const attachments = await (await col<Attachment>("attachments"))
       .find({ workspaceId: context.workspace.id, recordId: { $in: recordIds } })
@@ -1039,26 +1524,34 @@ export class MongoParentingRepository implements ParentingRepository {
   private async ensureDailyLog(
     context: RequestContext,
     localDate: string,
+    session?: ClientSession,
   ) {
     const logs = await col<DailyLog>("dailyLogs");
     const latestTemplate = await (await col<RoutineTemplate>("routineTemplates")).findOne(
       { workspaceId: context.workspace.id },
-      { sort: { version: -1 } },
+      { sort: { version: -1 }, session },
     );
     if (!latestTemplate) throw new Error("ROUTINE_TEMPLATE_NOT_FOUND");
-    const existing = await logs.findOne({ workspaceId: context.workspace.id, localDate });
+    const existing = await logs.findOne(
+      { workspaceId: context.workspace.id, localDate },
+      { session },
+    );
     if (existing) {
       if (existing.status !== "open" || existing.templateVersion === latestTemplate.version) {
         return existing;
       }
-      const hasEntry = await (await col<CareEntry>("careEntries")).findOne({
-        workspaceId: context.workspace.id,
-        dailyLogId: existing.id,
-      });
+      const hasEntry = await (await col<CareEntry>("careEntries")).findOne(
+        {
+          workspaceId: context.workspace.id,
+          dailyLogId: existing.id,
+        },
+        { session },
+      );
       if (hasEntry) return existing;
       await logs.updateOne(
         { id: existing.id, workspaceId: context.workspace.id, status: "open" },
         { $set: { templateVersion: latestTemplate.version } },
+        { session },
       );
       return { ...existing, templateVersion: latestTemplate.version };
     }
@@ -1070,10 +1563,13 @@ export class MongoParentingRepository implements ParentingRepository {
       status: "open",
     };
     try {
-      await logs.insertOne(log);
+      await logs.insertOne(log, { session });
       return log;
     } catch {
-      const concurrent = await logs.findOne({ workspaceId: context.workspace.id, localDate });
+      const concurrent = await logs.findOne(
+        { workspaceId: context.workspace.id, localDate },
+        { session },
+      );
       if (!concurrent) throw new Error("DAILY_LOG_CREATE_FAILED");
       return concurrent;
     }
@@ -1081,7 +1577,7 @@ export class MongoParentingRepository implements ParentingRepository {
 
   private initialRevision(
     context: RequestContext,
-    recordType: RecordType,
+    recordType: RevisionRecordType,
     recordId: string,
     payload: Record<string, unknown>,
     recordedAt: string,
@@ -1097,6 +1593,27 @@ export class MongoParentingRepository implements ParentingRepository {
       authorId: context.member.id,
       recordedAt,
       hash: createRevisionHash({ payload, authorId: context.member.id, recordedAt }),
+    };
+  }
+
+  private async getArrangementReferences(context: RequestContext) {
+    const [children, caregivers, templates] = await Promise.all([
+      (await col<Child>("children"))
+        .find({ workspaceId: context.workspace.id, active: true })
+        .toArray(),
+      (await col<Caregiver>("caregivers"))
+        .find({ workspaceId: context.workspace.id, active: true })
+        .toArray(),
+      (await col<RoutineTemplate>("routineTemplates"))
+        .find({ workspaceId: context.workspace.id })
+        .toArray(),
+    ]);
+    return {
+      childIds: new Set(children.map((child) => child.id)),
+      caregiverIds: new Set(caregivers.map((caregiver) => caregiver.id)),
+      routineIds: new Set(
+        templates.flatMap((template) => template.items.map((item) => item.id)),
+      ),
     };
   }
 

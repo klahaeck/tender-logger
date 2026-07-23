@@ -11,6 +11,8 @@ import type {
   RecordRevision,
   RecordType,
   ReportSnapshot,
+  SpecialArrangementDay,
+  SpecialArrangementsData,
   SettingsData,
   TimelineData,
   Workspace,
@@ -24,6 +26,9 @@ import type {
   IncidentInput,
   ReportInput,
   WorkspaceSettingsInput,
+  SpecialArrangementCorrectionInput,
+  SpecialArrangementCreateInput,
+  SpecialArrangementUpdateInput,
 } from "@/lib/domain/schemas";
 import type { Identity } from "@/lib/auth/identity";
 
@@ -48,6 +53,7 @@ export interface ReportSource {
   entries: CareEntry[];
   appointments: Appointment[];
   incidents: Incident[];
+  arrangements: SpecialArrangementDay[];
   revisions: RecordRevision[];
   attachments: Attachment[];
 }
@@ -60,6 +66,9 @@ export interface ParentingRepository {
   getIncidents(context: RequestContext): Promise<Incident[]>;
   getReports(context: RequestContext): Promise<ReportSnapshot[]>;
   getSettings(context: RequestContext): Promise<SettingsData>;
+  getSpecialArrangements(
+    context: RequestContext,
+  ): Promise<SpecialArrangementsData>;
   getRecordBundle(
     context: RequestContext,
     recordType: RecordType,
@@ -97,6 +106,18 @@ export interface ParentingRepository {
     context: RequestContext,
     localDate: string,
   ): Promise<DailyLog>;
+  createSpecialArrangement(
+    context: RequestContext,
+    input: SpecialArrangementCreateInput,
+  ): Promise<SpecialArrangementDay[]>;
+  updateSpecialArrangement(
+    context: RequestContext,
+    input: SpecialArrangementUpdateInput,
+  ): Promise<SpecialArrangementDay>;
+  correctSpecialArrangement(
+    context: RequestContext,
+    input: SpecialArrangementCorrectionInput,
+  ): Promise<RecordRevision>;
   createReport(
     context: RequestContext,
     input: ReportInput,

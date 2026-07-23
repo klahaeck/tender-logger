@@ -15,17 +15,37 @@ function safeName(name: string) {
 export async function generateEvidencePackage(source: ReportSource) {
   const pdf = await renderToBuffer(<ReportDocument source={source} />);
   const manifest = {
-    schemaVersion: 1,
+    schemaVersion: 2,
     reportId: source.snapshot.id,
     workspaceId: source.workspace.id,
     generatedAt: source.snapshot.createdAt,
     timezone: source.workspace.timezone,
     filters: source.snapshot.filters,
+    plannedArrangementNotice:
+      "Planned arrangements are context only and do not establish that care occurred.",
     records: [
       ...source.entries.map((record) => ({ type: "care_entry", id: record.id, currentRevisionId: record.currentRevisionId })),
       ...source.appointments.map((record) => ({ type: "appointment", id: record.id, currentRevisionId: record.currentRevisionId })),
       ...source.incidents.map((record) => ({ type: "incident", id: record.id, currentRevisionId: record.currentRevisionId })),
+      ...source.arrangements.map((record) => ({
+        type: "special_arrangement",
+        id: record.id,
+        currentRevisionId: record.currentRevisionId,
+      })),
     ],
+    plannedArrangements: source.arrangements.map((arrangement) => ({
+      id: arrangement.id,
+      seriesId: arrangement.seriesId,
+      localDate: arrangement.localDate,
+      title: arrangement.title,
+      note: arrangement.note,
+      status: arrangement.status,
+      assignments: arrangement.assignments,
+      tasks: arrangement.tasks,
+      createdAt: arrangement.createdAt,
+      updatedAt: arrangement.updatedAt,
+      currentRevisionId: arrangement.currentRevisionId,
+    })),
     revisions: source.revisions.map((revision) => ({
       id: revision.id,
       recordType: revision.recordType,

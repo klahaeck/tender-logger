@@ -36,14 +36,18 @@ test("public pricing explains owner billing and reviewer coverage", async ({ pag
   await expect(page.getByText("Billing preview unavailable")).toBeVisible();
 });
 
-test("public legal pages are available with visible draft placeholders", async ({ page }) => {
+test("public legal pages show the current operator and governing law", async ({ page }) => {
   await page.goto("/privacy");
   await expect(page.getByRole("heading", { name: "Privacy policy" })).toBeVisible();
-  await expect(page.getByText("[LEGAL OPERATOR NAME]").first()).toBeVisible();
+  await expect(
+    page.getByText(/Family Daybook is operated by Family Daybook/),
+  ).toBeVisible();
 
   await page.goto("/terms");
   await expect(page.getByRole("heading", { name: "Terms of use" })).toBeVisible();
-  await expect(page.getByText("[GOVERNING STATE AND COUNTRY]")).toBeVisible();
+  await expect(
+    page.getByText(/governed by the laws of MN, USA/),
+  ).toBeVisible();
 });
 
 test("public routes expose the intended crawler metadata", async ({ page, request }) => {
@@ -108,7 +112,7 @@ test("shows the daily care workflow", async ({ page }) => {
 test("mobile public and dashboard content stays within the viewport", async ({ page }, testInfo) => {
   test.skip(testInfo.project.name !== "mobile", "This regression targets the narrow mobile layout.");
 
-  for (const path of ["/", "/app"]) {
+  for (const path of ["/", "/app", "/app/special-days"]) {
     await page.goto(path);
     const layout = await page.evaluate(() => {
       const viewportWidth = document.documentElement.clientWidth;
@@ -149,9 +153,18 @@ test("mobile navigation exposes account controls", async ({ page }, testInfo) =>
 });
 
 test("primary pages have no serious accessibility violations", async ({ page }) => {
-  await page.goto("/app");
-  const results = await new AxeBuilder({ page }).disableRules(["color-contrast"]).analyze();
-  expect(results.violations.filter((violation) => violation.impact === "critical" || violation.impact === "serious")).toEqual([]);
+  for (const path of ["/app", "/app/special-days"]) {
+    await page.goto(path);
+    const results = await new AxeBuilder({ page })
+      .disableRules(["color-contrast"])
+      .analyze();
+    expect(
+      results.violations.filter(
+        (violation) =>
+          violation.impact === "critical" || violation.impact === "serious",
+      ),
+    ).toEqual([]);
+  }
 });
 
 test("shows saved routine changes on Today", async ({ page }, testInfo) => {
@@ -186,6 +199,69 @@ test("shows saved routine changes on Today", async ({ page }, testInfo) => {
   await expect(page.getByText("Settings saved.", { exact: true })).toBeVisible();
 });
 
+test("owner can plan a range and use a special-task caregiver default", async ({ page }, testInfo) => {
+  test.skip(
+    testInfo.project.name !== "chromium",
+    "Run the stateful special-arrangement flow once on desktop Chromium.",
+  );
+  const marker = Date.now().toString();
+  const title = `Camping weekend ${marker}`;
+  const plannedTask = `Pack camping gear ${marker}`;
+
+  await page.goto("/app/special-days");
+  await expect(
+    page.getByRole("heading", { name: "Special days" }),
+  ).toBeVisible();
+  await page.getByRole("button", { name: "New arrangement" }).click();
+  const dialog = page.getByRole("dialog");
+  await dialog.getByLabel("Arrangement name").fill(title);
+  const startDate = await dialog.getByLabel("Starts").inputValue();
+  const [year, month, day] = startDate.split("-").map(Number);
+  const nextDate = new Date(Date.UTC(year, month - 1, day + 1))
+    .toISOString()
+    .slice(0, 10);
+  await dialog.getByLabel("Through").fill(nextDate);
+  await dialog.getByText("Parent B", { exact: true }).click();
+  await dialog.getByLabel("Task").first().fill(plannedTask);
+  await dialog.getByRole("button", { name: "Save arrangement" }).click();
+
+  await expect(page.getByRole("heading", { name: title })).toHaveCount(2);
+  await page.goto("/app");
+  await expect(page.getByText(title, { exact: true })).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "Today’s special-day plan" }),
+  ).toBeVisible();
+  await page.getByRole("button", { name: `Record ${plannedTask}` }).click();
+  await expect(
+    page
+      .getByRole("dialog")
+      .getByRole("checkbox", { name: /Parent B/ }),
+  ).toBeChecked();
+  await page.keyboard.press("Escape");
+
+  await page.goto("/app/special-days");
+  for (let index = 0; index < 2; index += 1) {
+    const activeCard = page
+      .locator('[data-slot="card"]')
+      .filter({ hasText: title })
+      .filter({ hasText: "Active" })
+      .first();
+    await activeCard.getByRole("button", { name: "Edit" }).click();
+    const editDialog = page.getByRole("dialog");
+    await editDialog
+      .getByRole("checkbox", { name: /Arrangement is active/ })
+      .click();
+    await editDialog.getByRole("button", { name: "Save changes" }).click();
+    await expect(editDialog).not.toBeVisible();
+  }
+  await expect(
+    page
+      .locator('[data-slot="card"]')
+      .filter({ hasText: title })
+      .filter({ hasText: "Cancelled" }),
+  ).toHaveCount(2);
+});
+
 test("owner can complete the auditable record lifecycle", async ({ page, request }, testInfo) => {
   test.skip(testInfo.project.name !== "chromium", "Run the stateful lifecycle once on desktop Chromium.");
   test.setTimeout(90_000);
@@ -197,7 +273,7 @@ test("owner can complete the auditable record lifecycle", async ({ page, request
   const attachmentName = `safety-note-${marker}.png`;
 
   await page.goto("/app");
-  await page.getByRole("button", { name: /^Time together/ }).click();
+  await page.getByRole("button", { name: /Time together/ }).click();
   await expect(page.getByRole("heading", { name: "Time together" })).toBeVisible();
   await page.getByText("Parent B", { exact: true }).click();
   await page.getByLabel("Duration in minutes").fill("45");

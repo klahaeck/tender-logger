@@ -84,4 +84,120 @@ describe.skipIf(!configured)("MongoDB repository integration", () => {
     const resolvedAgain = await repository.resolveContext(context.identity);
     expect(resolvedAgain.workspace.id).toBe(context.workspace.id);
   });
+
+  it("writes isolated special-arrangement days and append-only corrections", async () => {
+    const { MongoParentingRepository } = await import("@/lib/repository/mongo-repository");
+    const { createArrangementTasksForDate } = await import(
+      "@/lib/domain/arrangements"
+    );
+    const repository = new MongoParentingRepository();
+    const context = await repository.resolveContext({
+      authUserId: "mongo-arrangement-owner",
+      email: "mongo-arrangement-owner@example.test",
+      displayName: "Arrangement Owner",
+      mfaEnabled: true,
+      demo: false,
+    });
+    const settings = await repository.getSettings(context);
+    const localDates = ["2026-07-25", "2026-07-26"];
+    const assignments = [
+      {
+        childId: settings.children[0].id,
+        caregiverIds: [settings.caregivers[0].id],
+      },
+    ];
+    const createdDays = await repository.createSpecialArrangement(context, {
+      title: "Camping weekend",
+      startDate: localDates[0],
+      endDate: localDates[1],
+      assignments,
+      days: localDates.map((localDate) => ({
+        localDate,
+        tasks: createArrangementTasksForDate(
+          localDate,
+          settings.template,
+          settings.children,
+        ),
+      })),
+    });
+    const created = createdDays[0];
+    expect(createdDays).toHaveLength(2);
+    expect(new Set(createdDays.map((day) => day.seriesId)).size).toBe(1);
+    expect(
+      (await repository.getDashboard(context, localDates[0]))
+        .specialArrangement?.id,
+    ).toBe(created.id);
+
+    const otherContext = await repository.resolveContext({
+      authUserId: "mongo-arrangement-other-owner",
+      email: "mongo-arrangement-other-owner@example.test",
+      displayName: "Other Arrangement Owner",
+      mfaEnabled: true,
+      demo: false,
+    });
+    expect(
+      (await repository.getSpecialArrangements(otherContext)).days,
+    ).toHaveLength(0);
+    await expect(
+      repository.updateSpecialArrangement(otherContext, {
+        recordId: created.id,
+        title: created.title,
+        status: "active",
+        assignments,
+        tasks: created.tasks,
+      }),
+    ).rejects.toThrow("NOT_FOUND");
+
+    await expect(
+      repository.createSpecialArrangement(context, {
+        title: "Conflicting arrangement",
+        startDate: "2026-07-24",
+        endDate: localDates[0],
+        assignments,
+        days: [
+          {
+            localDate: "2026-07-24",
+            tasks: createArrangementTasksForDate(
+              "2026-07-24",
+              settings.template,
+              settings.children,
+            ),
+          },
+          { localDate: localDates[0], tasks: [] },
+        ],
+      }),
+    ).rejects.toThrow("ARRANGEMENT_CONFLICT");
+    expect(
+      (await repository.getSpecialArrangements(context)).days.some(
+        (day) => day.localDate === "2026-07-24",
+      ),
+    ).toBe(false);
+
+    await repository.finalizeDailyLog(context, localDates[0]);
+    const corrected = await repository.correctSpecialArrangement(context, {
+      recordId: created.id,
+      title: "Corrected camping weekend",
+      status: "active",
+      assignments,
+      tasks: created.tasks,
+      reason: "Corrected the arrangement title.",
+    });
+    expect(corrected.previousRevisionId).toBe(created.currentRevisionId);
+
+    const report = await repository.createReport(context, {
+      from: localDates[0],
+      to: localDates[0],
+      childIds: [],
+      includeCare: true,
+      includeAppointments: true,
+      includeIncidents: true,
+    });
+    const source = await repository.getReportSource(context, report.id);
+    expect(source?.arrangements).toHaveLength(1);
+    expect(
+      source?.revisions.filter(
+        (revision) => revision.recordType === "special_arrangement",
+      ),
+    ).toHaveLength(2);
+  });
 });

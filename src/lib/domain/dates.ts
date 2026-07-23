@@ -30,6 +30,11 @@ export function shiftLocalDate(value: string, days: number): string {
     .slice(0, 10);
 }
 
+export function weekdayForLocalDate(value: string): number {
+  if (!isValidLocalDate(value)) throw new Error("INVALID_LOCAL_DATE");
+  return new Date(`${value}T12:00:00.000Z`).getUTCDay();
+}
+
 export function ageOnDate(birthdate: string, onDate: string): number | null {
   if (!isValidLocalDate(birthdate) || !isValidLocalDate(onDate) || birthdate > onDate) {
     return null;

@@ -20,6 +20,7 @@ import type {
   RecordRevision,
   ReportSnapshot,
   RoutineTemplate,
+  SpecialArrangementDay,
   Workspace,
 } from "@/lib/domain/types";
 
@@ -30,6 +31,7 @@ export interface ParentingState {
   caregivers: Caregiver[];
   templates: RoutineTemplate[];
   dailyLogs: DailyLog[];
+  specialArrangements: SpecialArrangementDay[];
   careEntries: CareEntry[];
   appointments: Appointment[];
   incidents: Incident[];
@@ -266,6 +268,7 @@ export function createSeedState(
     caregivers,
     templates: [template],
     dailyLogs: [dailyLog],
+    specialArrangements: [],
     careEntries,
     appointments: [],
     incidents: [],

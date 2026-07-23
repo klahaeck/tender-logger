@@ -1,14 +1,15 @@
 "use client";
 
 import { useTransition } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { CheckCircle2, ChevronLeft, ChevronRight, Clock3, LockKeyhole, Users } from "lucide-react";
+import { CalendarRange, CheckCircle2, ChevronLeft, ChevronRight, Clock3, LockKeyhole, Users } from "lucide-react";
 
 import { finalizeDailyLogAction } from "@/app/actions";
 import { CareEntryDialog } from "@/components/forms/care-entry-dialog";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Progress } from "@/components/ui/progress";
@@ -19,6 +20,13 @@ import type { DashboardData } from "@/lib/domain/types";
 
 function childNames(ids: string[], data: DashboardData) {
   return ids.map((id) => data.children.find((child) => child.id === id)?.displayName).filter(Boolean).join(" + ");
+}
+
+function caregiverNames(ids: string[], data: DashboardData) {
+  return ids
+    .map((id) => data.caregivers.find((caregiver) => caregiver.id === id)?.displayName)
+    .filter(Boolean)
+    .join(" + ");
 }
 
 export function TodayDashboard({ date, today, initialData }: { date: string; today: string; initialData: DashboardData }) {
@@ -49,7 +57,16 @@ export function TodayDashboard({ date, today, initialData }: { date: string; tod
           <h1 className="text-3xl font-semibold tracking-tight sm:text-4xl">{formatDay(date)}</h1>
           <p className="mt-2 text-sm text-muted-foreground">A clear, factual view of {historical ? "care on this day" : "today’s care"} for your children.</p>
         </div>
-        <CareEntryDialog date={date} today={today} timezone={data.workspace.timezone} childOptions={data.children} caregivers={data.caregivers} finalized={data.dailyLog.status === "finalized"} />
+        <div className="flex flex-wrap gap-2">
+          <Link
+            href="/app/special-days"
+            className={buttonVariants({ variant: "outline", size: "sm" })}
+          >
+            <CalendarRange className="size-4" />
+            Special days
+          </Link>
+          <CareEntryDialog date={date} today={today} timezone={data.workspace.timezone} childOptions={data.children} caregivers={data.caregivers} finalized={data.dailyLog.status === "finalized"} />
+        </div>
       </div>
 
       <div className="flex min-w-0 max-w-full flex-col gap-3 rounded-2xl border bg-card p-3 shadow-sm sm:flex-row sm:items-center sm:justify-between">
@@ -102,22 +119,76 @@ export function TodayDashboard({ date, today, initialData }: { date: string; tod
         </div>
       )}
 
+      {data.specialArrangement && (
+        <Card className="border-primary/25 bg-primary/5">
+          <CardContent className="p-5">
+            <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+              <div>
+                <div className="flex items-center gap-2">
+                  <CalendarRange className="size-4 text-primary" />
+                  <p className="text-sm font-semibold text-primary">
+                    Special arrangement
+                  </p>
+                </div>
+                <h2 className="mt-2 text-lg font-semibold">
+                  {data.specialArrangement.title}
+                </h2>
+                <div className="mt-2 flex flex-wrap gap-2">
+                  {data.specialArrangement.assignments.map((assignment) => (
+                    <Badge key={assignment.childId} variant="secondary">
+                      {childNames([assignment.childId], data)} ·{" "}
+                      {caregiverNames(assignment.caregiverIds, data)}
+                    </Badge>
+                  ))}
+                </div>
+                {data.specialArrangement.note && (
+                  <p className="mt-3 max-w-3xl whitespace-pre-wrap text-sm leading-6 text-muted-foreground">
+                    {data.specialArrangement.note}
+                  </p>
+                )}
+                <p className="mt-3 text-xs text-muted-foreground">
+                  This is planned context. Saved care records describe what actually
+                  occurred.
+                </p>
+              </div>
+              <Link
+                href="/app/special-days"
+                className={buttonVariants({ variant: "outline", size: "sm" })}
+              >
+                Manage
+              </Link>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       <div className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-4 md:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)]">
         <Card className="min-w-0 max-w-full overflow-hidden border-0 bg-primary text-primary-foreground shadow-lg shadow-primary/10">
           <CardContent className="p-6 sm:p-7">
             <div className="flex items-start justify-between gap-4">
               <div>
-                <p className="text-sm text-primary-foreground/70">Routine progress</p>
+                <p className="text-sm text-primary-foreground/70">
+                  {data.specialArrangement
+                    ? "Special-day plan progress"
+                    : "Routine progress"}
+                </p>
                 <p className="mt-1 text-4xl font-semibold tracking-tight">{data.completion.percent}%</p>
               </div>
               <div className="rounded-2xl bg-white/10 p-3"><CheckCircle2 className="size-6" /></div>
             </div>
             <Progress
               value={data.completion.percent}
-              aria-label="Routine completion"
+              aria-label={
+                data.specialArrangement
+                  ? "Special-day plan completion"
+                  : "Routine completion"
+              }
               className="mt-6 bg-white/15 [&_[data-slot=progress-indicator]]:bg-white"
             />
-            <p className="mt-3 text-sm text-primary-foreground/75">{data.completion.completed} of {data.completion.total} routine items recorded</p>
+            <p className="mt-3 text-sm text-primary-foreground/75">
+              {data.completion.completed} of {data.completion.total}{" "}
+              {data.specialArrangement ? "planned tasks" : "routine items"} recorded
+            </p>
           </CardContent>
         </Card>
         <Card className="min-w-0 max-w-full">
@@ -142,8 +213,13 @@ export function TodayDashboard({ date, today, initialData }: { date: string; tod
       <section aria-labelledby="routine-heading" className="min-w-0 max-w-full">
         <div className="mb-4 flex items-center justify-between">
           <div>
-            <h2 id="routine-heading" className="text-xl font-semibold tracking-tight">Today’s routine</h2>
-            <p className="mt-1 text-sm text-muted-foreground">Tap an item to record it, edit it while the day is open, or correct it after finalization.</p>
+            <h2 id="routine-heading" className="text-xl font-semibold tracking-tight">
+              {data.specialArrangement ? "Today’s special-day plan" : "Today’s routine"}
+            </h2>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Tap an item to record it, edit it while the day is open, or correct it
+              after finalization.
+            </p>
           </div>
         </div>
         <div className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-3 sm:grid-cols-2 xl:grid-cols-3">

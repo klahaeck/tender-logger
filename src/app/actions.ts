@@ -17,6 +17,9 @@ import {
   inviteSchema,
   purgeSchema,
   reportSchema,
+  specialArrangementCorrectionSchema,
+  specialArrangementCreateSchema,
+  specialArrangementUpdateSchema,
   workspaceSettingsSchema,
 } from "@/lib/domain/schemas";
 import type { ActionResult, Attachment, Caregiver, Child, RecordType, RoutineTemplate } from "@/lib/domain/types";
@@ -51,6 +54,15 @@ function fail(error: unknown): ActionResult<never> {
     DAY_NOT_FINALIZED: "This day is still open. Edit the record instead.",
     ALREADY_INVITED: "That reviewer already has access or a pending invitation.",
     HARD_DELETE_DISABLED: "Hard deletion is disabled in workspace settings.",
+    ARRANGEMENT_CONFLICT:
+      "One or more dates already have a special arrangement.",
+    INVALID_ARRANGEMENT_CHILDREN:
+      "Assign one or more caregivers to every active child.",
+    INVALID_ARRANGEMENT_CAREGIVER:
+      "One of the selected caregivers is no longer available.",
+    INVALID_ARRANGEMENT_TASK:
+      "One of the planned tasks is no longer available.",
+    INVALID_CARE_TASK: "Choose either a routine task or a special-arrangement task.",
   };
   return { ok: false, error: safe[message] ?? (process.env.NODE_ENV === "production" ? "The request could not be completed." : message) };
 }
@@ -66,6 +78,7 @@ function refreshRecords() {
   revalidatePath("/app/incidents");
   revalidatePath("/app/reports");
   revalidatePath("/app/settings");
+  revalidatePath("/app/special-days");
 }
 
 export async function createCareEntryAction(input: unknown): Promise<ActionResult<{ id: string }>> {
@@ -244,6 +257,73 @@ export async function finalizeDailyLogAction(localDate: string): Promise<ActionR
     const log = await repository.finalizeDailyLog(context, localDate);
     refreshRecords();
     return { ok: true, data: { finalizedAt: log.finalizedAt } };
+  } catch (error) {
+    return fail(error);
+  }
+}
+
+export async function createSpecialArrangementAction(
+  input: unknown,
+): Promise<ActionResult<{ seriesId: string; dayIds: string[] }>> {
+  const parsed = specialArrangementCreateSchema.safeParse(input);
+  if (!parsed.success) return validationFailure(parsed.error);
+  try {
+    const repository = await getRepository();
+    const context = await getRequestContext();
+    const today = localDateInTimezone(new Date(), context.workspace.timezone);
+    if (parsed.data.startDate < today) {
+      return {
+        ok: false,
+        error: "New special arrangements must begin today or later.",
+      };
+    }
+    const days = await repository.createSpecialArrangement(context, parsed.data);
+    refreshRecords();
+    return {
+      ok: true,
+      data: {
+        seriesId: days[0]?.seriesId ?? "",
+        dayIds: days.map((day) => day.id),
+      },
+    };
+  } catch (error) {
+    return fail(error);
+  }
+}
+
+export async function updateSpecialArrangementAction(
+  input: unknown,
+): Promise<ActionResult<{ id: string }>> {
+  const parsed = specialArrangementUpdateSchema.safeParse(input);
+  if (!parsed.success) return validationFailure(parsed.error);
+  try {
+    const repository = await getRepository();
+    const context = await getRequestContext();
+    const arrangement = await repository.updateSpecialArrangement(
+      context,
+      parsed.data,
+    );
+    refreshRecords();
+    return { ok: true, data: { id: arrangement.id } };
+  } catch (error) {
+    return fail(error);
+  }
+}
+
+export async function correctSpecialArrangementAction(
+  input: unknown,
+): Promise<ActionResult<{ revisionId: string }>> {
+  const parsed = specialArrangementCorrectionSchema.safeParse(input);
+  if (!parsed.success) return validationFailure(parsed.error);
+  try {
+    const repository = await getRepository();
+    const context = await getRequestContext();
+    const revision = await repository.correctSpecialArrangement(
+      context,
+      parsed.data,
+    );
+    refreshRecords();
+    return { ok: true, data: { revisionId: revision.id } };
   } catch (error) {
     return fail(error);
   }

@@ -36,6 +36,7 @@ export type IncidentCategory =
   | "other";
 
 export type RecordType = "care_entry" | "appointment" | "incident";
+export type RevisionRecordType = RecordType | "special_arrangement";
 
 export type ActionResult<T = undefined> = {
   ok: boolean;
@@ -116,11 +117,45 @@ export interface DailyLog {
   finalizedBy?: string;
 }
 
+export interface SpecialArrangementAssignment {
+  childId: string;
+  caregiverIds: string[];
+}
+
+export interface SpecialArrangementTask {
+  id: string;
+  sourceRoutineItemId?: string;
+  taskKey: CareTaskKey;
+  childId: string;
+  label: string;
+  suggestedTime: string;
+  sortOrder: number;
+}
+
+export interface SpecialArrangementDay {
+  id: string;
+  workspaceId: string;
+  seriesId: string;
+  dailyLogId: string;
+  localDate: string;
+  title: string;
+  note?: string;
+  status: "active" | "cancelled";
+  assignments: SpecialArrangementAssignment[];
+  tasks: SpecialArrangementTask[];
+  currentRevisionId: string;
+  createdAt: string;
+  updatedAt: string;
+  createdBy: string;
+  dailyLogStatus?: DailyLog["status"];
+}
+
 export interface CareEntry {
   id: string;
   workspaceId: string;
   dailyLogId: string;
   templateItemId?: string;
+  arrangementTaskId?: string;
   taskKey: CareTaskKey;
   taskLabel: string;
   childIds: string[];
@@ -176,7 +211,7 @@ export interface Incident {
 export interface RecordRevision {
   id: string;
   workspaceId: string;
-  recordType: RecordType;
+  recordType: RevisionRecordType;
   recordId: string;
   previousRevisionId?: string;
   revisionNumber: number;
@@ -261,7 +296,19 @@ export interface PurgeTombstone {
   purgedAt: string;
 }
 
-export interface TodayTask extends RoutineTemplateItem {
+export interface TodayTask {
+  id: string;
+  source: "routine" | "special_arrangement";
+  templateItemId?: string;
+  arrangementTaskId?: string;
+  taskKey: CareTaskKey;
+  label: string;
+  childIds: string[];
+  weekdays: number[];
+  suggestedTime: string;
+  sortOrder: number;
+  active: boolean;
+  plannedCaregiverIds: string[];
   entry?: CareEntry;
 }
 
@@ -273,6 +320,7 @@ export interface DashboardData {
   children: Child[];
   caregivers: Caregiver[];
   tasks: TodayTask[];
+  specialArrangement?: SpecialArrangementDay;
   completion: { completed: number; total: number; percent: number };
   recentEntries: CareEntry[];
 }
@@ -307,4 +355,12 @@ export interface SettingsData {
   children: Child[];
   caregivers: Caregiver[];
   template: RoutineTemplate;
+}
+
+export interface SpecialArrangementsData {
+  workspace: Workspace;
+  children: Child[];
+  caregivers: Caregiver[];
+  template: RoutineTemplate;
+  days: SpecialArrangementDay[];
 }

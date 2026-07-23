@@ -1,6 +1,10 @@
 import "server-only";
 
-import { lateEntryFor, localDateInTimezone } from "@/lib/domain/dates";
+import {
+  lateEntryFor,
+  localDateInTimezone,
+  weekdayForLocalDate,
+} from "@/lib/domain/dates";
 import {
   createAuditHash,
   createRevisionHash,
@@ -17,8 +21,11 @@ import type {
   PurgeTombstone,
   RecordRevision,
   RecordType,
+  RevisionRecordType,
   ReportSnapshot,
+  SpecialArrangementDay,
   SettingsData,
+  TodayTask,
 } from "@/lib/domain/types";
 import type {
   AppointmentInput,
@@ -28,10 +35,15 @@ import type {
   CorrectionInput,
   IncidentInput,
   ReportInput,
+  SpecialArrangementCorrectionInput,
+  SpecialArrangementCreateInput,
+  SpecialArrangementUpdateInput,
   WorkspaceSettingsInput,
 } from "@/lib/domain/schemas";
 import { createSeedState, type ParentingState } from "./seed";
 import {
+  arrangementAtIncludedRevision,
+  arrangementForChildren,
   createNextRoutineItems,
   recordPayload,
   requireOwner,
@@ -88,6 +100,92 @@ function findRecord(data: ParentingState, type: RecordType, recordId: string) {
   return data.incidents.find((item) => item.id === recordId);
 }
 
+function arrangementPayload(
+  arrangement: Pick<
+    SpecialArrangementDay,
+    | "localDate"
+    | "title"
+    | "note"
+    | "status"
+    | "assignments"
+    | "tasks"
+    | "updatedAt"
+  >,
+): Record<string, unknown> {
+  return JSON.parse(JSON.stringify(arrangement)) as Record<string, unknown>;
+}
+
+function normalizeArrangementFields(
+  data: ParentingState,
+  input: Pick<
+    SpecialArrangementUpdateInput,
+    "title" | "note" | "status" | "assignments" | "tasks"
+  >,
+  current?: SpecialArrangementDay,
+) {
+  const activeChildren = data.children.filter((child) => child.active);
+  const activeChildIds = new Set(activeChildren.map((child) => child.id));
+  const assignmentIds = new Set(input.assignments.map((assignment) => assignment.childId));
+  if (
+    input.assignments.length !== activeChildIds.size ||
+    assignmentIds.size !== activeChildIds.size ||
+    [...activeChildIds].some((childId) => !assignmentIds.has(childId))
+  ) {
+    throw new Error("INVALID_ARRANGEMENT_CHILDREN");
+  }
+  const activeCaregiverIds = new Set(
+    data.caregivers.filter((caregiver) => caregiver.active).map((caregiver) => caregiver.id),
+  );
+  if (
+    input.assignments.some((assignment) =>
+      assignment.caregiverIds.length === 0 ||
+      new Set(assignment.caregiverIds).size !== assignment.caregiverIds.length ||
+      assignment.caregiverIds.some(
+        (caregiverId) => !activeCaregiverIds.has(caregiverId),
+      ),
+    )
+  ) {
+    throw new Error("INVALID_ARRANGEMENT_CAREGIVER");
+  }
+  const routineIds = new Set(
+    data.templates.flatMap((template) => template.items.map((item) => item.id)),
+  );
+  const currentTaskIds = new Set(current?.tasks.map((task) => task.id) ?? []);
+  const submittedTaskIds = new Set<string>();
+  const tasks = input.tasks.map((task, index) => {
+    if (!activeChildIds.has(task.childId)) {
+      throw new Error("INVALID_ARRANGEMENT_TASK");
+    }
+    if (task.sourceRoutineItemId && !routineIds.has(task.sourceRoutineItemId)) {
+      throw new Error("INVALID_ROUTINE_ITEM");
+    }
+    if (task.id && (!currentTaskIds.has(task.id) || submittedTaskIds.has(task.id))) {
+      throw new Error("INVALID_ARRANGEMENT_TASK");
+    }
+    const taskId = task.id ?? id("arrangement_task");
+    submittedTaskIds.add(taskId);
+    return {
+      id: taskId,
+      sourceRoutineItemId: task.sourceRoutineItemId,
+      taskKey: task.taskKey,
+      childId: task.childId,
+      label: task.label,
+      suggestedTime: task.suggestedTime,
+      sortOrder: index + 1,
+    };
+  });
+  return {
+    title: input.title,
+    note: input.note || undefined,
+    status: input.status,
+    assignments: input.assignments.map((assignment) => ({
+      childId: assignment.childId,
+      caregiverIds: [...assignment.caregiverIds],
+    })),
+    tasks,
+  };
+}
+
 export class MemoryParentingRepository implements ParentingRepository {
   async resolveContext(identity: Identity): Promise<RequestContext> {
     const data = state();
@@ -120,15 +218,39 @@ export class MemoryParentingRepository implements ParentingRepository {
     const template =
       data.templates.find((item) => item.version === dailyLog.templateVersion) ??
       latestTemplate(data);
-    const weekday = new Date(`${date}T12:00:00`).getDay();
-    const tasks = template.items
-      .filter((item) => item.active && item.weekdays.includes(weekday))
-      .map((item) => ({
-        ...item,
-        entry: entries
-          .filter((entry) => entry.dailyLogId === dailyLog.id)
-          .find((entry) => entry.templateItemId === item.id),
-      }));
+    const weekday = weekdayForLocalDate(date);
+    const dayEntries = entries.filter((entry) => entry.dailyLogId === dailyLog.id);
+    const specialArrangement = data.specialArrangements.find(
+      (arrangement) =>
+        arrangement.dailyLogId === dailyLog.id && arrangement.status === "active",
+    );
+    const tasks: TodayTask[] = specialArrangement
+      ? specialArrangement.tasks.map((task) => ({
+          id: task.id,
+          source: "special_arrangement",
+          arrangementTaskId: task.id,
+          taskKey: task.taskKey,
+          label: task.label,
+          childIds: [task.childId],
+          weekdays: [weekday],
+          suggestedTime: task.suggestedTime,
+          sortOrder: task.sortOrder,
+          active: true,
+          plannedCaregiverIds:
+            specialArrangement.assignments.find(
+              (assignment) => assignment.childId === task.childId,
+            )?.caregiverIds ?? [],
+          entry: dayEntries.find((entry) => entry.arrangementTaskId === task.id),
+        }))
+      : template.items
+          .filter((item) => item.active && item.weekdays.includes(weekday))
+          .map((item) => ({
+            ...item,
+            source: "routine" as const,
+            templateItemId: item.id,
+            plannedCaregiverIds: [],
+            entry: dayEntries.find((entry) => entry.templateItemId === item.id),
+          }));
     const completed = tasks.filter(
       (task) => task.entry?.status === "completed" || task.entry?.status === "not_applicable",
     ).length;
@@ -141,13 +263,13 @@ export class MemoryParentingRepository implements ParentingRepository {
       children: data.children.filter((child) => child.active),
       caregivers: data.caregivers.filter((caregiver) => caregiver.active),
       tasks,
+      specialArrangement,
       completion: {
         completed,
         total: tasks.length,
         percent: tasks.length ? Math.round((completed / tasks.length) * 100) : 0,
       },
-      recentEntries: entries
-        .filter((entry) => entry.dailyLogId === dailyLog.id)
+      recentEntries: dayEntries
         .sort(
           (a, b) =>
             new Date(b.occurredAt).getTime() - new Date(a.occurredAt).getTime(),
@@ -221,6 +343,25 @@ export class MemoryParentingRepository implements ParentingRepository {
     };
   }
 
+  async getSpecialArrangements(context: RequestContext) {
+    requireOwner(context.member.role);
+    const data = state();
+    return {
+      workspace: context.workspace,
+      children: data.children.filter((child) => child.active),
+      caregivers: data.caregivers.filter((caregiver) => caregiver.active),
+      template: latestTemplate(data),
+      days: [...data.specialArrangements]
+        .sort((a, b) => b.localDate.localeCompare(a.localDate))
+        .map((arrangement) => ({
+          ...arrangement,
+          dailyLogStatus: data.dailyLogs.find(
+            (log) => log.id === arrangement.dailyLogId,
+          )?.status,
+        })),
+    };
+  }
+
   async getRecordBundle(
     context: RequestContext,
     recordType: RecordType,
@@ -275,6 +416,9 @@ export class MemoryParentingRepository implements ParentingRepository {
     const includesChildren = (childIds: string[]) =>
       snapshot.filters.childIds.length === 0 ||
       childIds.some((childId) => snapshot.filters.childIds.includes(childId));
+    const snapshotRevisions = data.revisions.filter((revision) =>
+      snapshot.recordRevisionIds.includes(revision.id),
+    );
     return {
       snapshot,
       workspace: data.workspace,
@@ -297,9 +441,18 @@ export class MemoryParentingRepository implements ParentingRepository {
             (item) => inRange(item.occurredAt) && includesChildren(item.childIds),
           )
         : [],
-      revisions: data.revisions.filter((revision) =>
-        snapshot.recordRevisionIds.includes(revision.id),
-      ),
+      arrangements: data.specialArrangements
+        .map((arrangement) =>
+          arrangementAtIncludedRevision(arrangement, snapshotRevisions),
+        )
+        .filter(
+          (arrangement): arrangement is SpecialArrangementDay =>
+            arrangement?.status === "active",
+        )
+        .map((arrangement) =>
+          arrangementForChildren(arrangement, snapshot.filters.childIds),
+        ),
+      revisions: snapshotRevisions,
       attachments: data.attachments.filter((attachment) =>
         snapshot.attachmentIds.includes(attachment.id),
       ),
@@ -311,8 +464,29 @@ export class MemoryParentingRepository implements ParentingRepository {
     const data = state();
     const recordedAt = new Date().toISOString();
     const dailyLog = ensureDailyLog(data, input.localDate);
+    if (input.templateItemId && input.arrangementTaskId) {
+      throw new Error("INVALID_CARE_TASK");
+    }
+    const arrangementTask = input.arrangementTaskId
+      ? data.specialArrangements
+          .find(
+            (arrangement) =>
+              arrangement.dailyLogId === dailyLog.id && arrangement.status === "active",
+          )
+          ?.tasks.find((task) => task.id === input.arrangementTaskId)
+      : undefined;
+    if (input.arrangementTaskId && !arrangementTask) {
+      throw new Error("INVALID_ARRANGEMENT_TASK");
+    }
+    const normalizedInput = arrangementTask
+      ? {
+          ...input,
+          taskKey: arrangementTask.taskKey,
+          taskLabel: arrangementTask.label,
+        }
+      : input;
     const recordId = id("care");
-    const payload: Record<string, unknown> = { ...input };
+    const payload: Record<string, unknown> = { ...normalizedInput };
     const revision = this.createRevision(
       data,
       "care_entry",
@@ -325,21 +499,22 @@ export class MemoryParentingRepository implements ParentingRepository {
       id: recordId,
       workspaceId: data.workspace.id,
       dailyLogId: dailyLog.id,
-      templateItemId: input.templateItemId,
-      taskKey: input.taskKey,
-      taskLabel: input.taskLabel,
-      childIds: input.childIds,
-      caregiverIds: input.caregiverIds,
-      status: input.status,
-      occurredAt: new Date(input.occurredAt).toISOString(),
+      templateItemId: normalizedInput.templateItemId,
+      arrangementTaskId: normalizedInput.arrangementTaskId,
+      taskKey: normalizedInput.taskKey,
+      taskLabel: normalizedInput.taskLabel,
+      childIds: normalizedInput.childIds,
+      caregiverIds: normalizedInput.caregiverIds,
+      status: normalizedInput.status,
+      occurredAt: new Date(normalizedInput.occurredAt).toISOString(),
       recordedAt,
-      durationMinutes: input.durationMinutes,
-      activityType: input.activityType,
-      notes: input.notes,
+      durationMinutes: normalizedInput.durationMinutes,
+      activityType: normalizedInput.activityType,
+      notes: normalizedInput.notes,
       currentRevisionId: revision.id,
       createdBy: context.member.id,
       lateEntry: lateEntryFor(
-        input.occurredAt,
+        normalizedInput.occurredAt,
         recordedAt,
         context.workspace.timezone,
       ),
@@ -604,11 +779,185 @@ export class MemoryParentingRepository implements ParentingRepository {
     return log;
   }
 
+  async createSpecialArrangement(
+    context: RequestContext,
+    input: SpecialArrangementCreateInput,
+  ) {
+    requireOwner(context.member.role);
+    const data = state();
+    if (
+      input.days.some((day) =>
+        data.specialArrangements.some(
+          (arrangement) => arrangement.localDate === day.localDate,
+        ),
+      )
+    ) {
+      throw new Error("ARRANGEMENT_CONFLICT");
+    }
+    const sortedDays = [...input.days].sort((a, b) =>
+      a.localDate.localeCompare(b.localDate),
+    );
+    if (
+      sortedDays.some((day) =>
+        data.dailyLogs.some(
+          (log) =>
+            log.localDate === day.localDate && log.status === "finalized",
+        ),
+      )
+    ) {
+      throw new Error("DAY_FINALIZED");
+    }
+    const preparedDays = sortedDays.map((day) => ({
+      day,
+      fields: normalizeArrangementFields(data, {
+        title: input.title,
+        note: input.note,
+        status: "active",
+        assignments: input.assignments,
+        tasks: day.tasks,
+      }),
+    }));
+    const seriesId = id("arrangement_series");
+    const createdAt = new Date().toISOString();
+    const created: SpecialArrangementDay[] = [];
+    for (const { day, fields } of preparedDays) {
+      const dailyLog = ensureDailyLog(data, day.localDate);
+      const recordId = id("arrangement");
+      const base = {
+        id: recordId,
+        workspaceId: data.workspace.id,
+        seriesId,
+        dailyLogId: dailyLog.id,
+        localDate: day.localDate,
+        ...fields,
+        createdAt,
+        updatedAt: createdAt,
+        createdBy: context.member.id,
+      };
+      const revision = this.createRevision(
+        data,
+        "special_arrangement",
+        recordId,
+        arrangementPayload(base),
+        context.member.id,
+        createdAt,
+      );
+      const arrangement: SpecialArrangementDay = {
+        ...base,
+        currentRevisionId: revision.id,
+      };
+      data.specialArrangements.push(arrangement);
+      created.push(arrangement);
+      await this.audit(context, "created", "special_arrangement", recordId, {
+        localDate: day.localDate,
+      });
+    }
+    return created;
+  }
+
+  async updateSpecialArrangement(
+    context: RequestContext,
+    input: SpecialArrangementUpdateInput,
+  ) {
+    requireOwner(context.member.role);
+    const data = state();
+    const arrangement = data.specialArrangements.find(
+      (item) => item.id === input.recordId,
+    );
+    if (!arrangement) throw new Error("NOT_FOUND");
+    const dailyLog = data.dailyLogs.find((log) => log.id === arrangement.dailyLogId);
+    if (!dailyLog) throw new Error("NOT_FOUND");
+    if (dailyLog.status !== "open") throw new Error("DAY_FINALIZED");
+    const revision = data.revisions.find(
+      (item) => item.id === arrangement.currentRevisionId,
+    );
+    if (!revision) throw new Error("REVISION_NOT_FOUND");
+    const fields = normalizeArrangementFields(data, input, arrangement);
+    const updatedAt = new Date().toISOString();
+    const payload = arrangementPayload({
+      localDate: arrangement.localDate,
+      ...fields,
+      updatedAt,
+    });
+    revision.payload = payload;
+    revision.authorId = context.member.id;
+    revision.recordedAt = updatedAt;
+    revision.hash = createRevisionHash({
+      payload,
+      authorId: context.member.id,
+      recordedAt: updatedAt,
+    });
+    Object.assign(arrangement, fields, { updatedAt });
+    await this.audit(context, "updated", "special_arrangement", arrangement.id, {
+      revisionNumber: revision.revisionNumber,
+    });
+    return arrangement;
+  }
+
+  async correctSpecialArrangement(
+    context: RequestContext,
+    input: SpecialArrangementCorrectionInput,
+  ) {
+    requireOwner(context.member.role);
+    const data = state();
+    const arrangement = data.specialArrangements.find(
+      (item) => item.id === input.recordId,
+    );
+    if (!arrangement) throw new Error("NOT_FOUND");
+    const dailyLog = data.dailyLogs.find((log) => log.id === arrangement.dailyLogId);
+    if (!dailyLog) throw new Error("NOT_FOUND");
+    if (dailyLog.status !== "finalized") throw new Error("DAY_NOT_FINALIZED");
+    const previous = data.revisions.find(
+      (item) => item.id === arrangement.currentRevisionId,
+    );
+    if (!previous) throw new Error("REVISION_NOT_FOUND");
+    const fields = normalizeArrangementFields(data, input, arrangement);
+    const recordedAt = new Date().toISOString();
+    const payload = arrangementPayload({
+      localDate: arrangement.localDate,
+      ...fields,
+      updatedAt: recordedAt,
+    });
+    const revision: RecordRevision = {
+      id: id("rev"),
+      workspaceId: data.workspace.id,
+      recordType: "special_arrangement",
+      recordId: arrangement.id,
+      previousRevisionId: previous.id,
+      revisionNumber: previous.revisionNumber + 1,
+      payload,
+      reason: input.reason,
+      authorId: context.member.id,
+      recordedAt,
+      hash: createRevisionHash({
+        payload,
+        previousHash: previous.hash,
+        authorId: context.member.id,
+        recordedAt,
+      }),
+    };
+    data.revisions.push(revision);
+    Object.assign(arrangement, fields, {
+      updatedAt: recordedAt,
+      currentRevisionId: revision.id,
+    });
+    await this.audit(
+      context,
+      "corrected",
+      "special_arrangement",
+      arrangement.id,
+      { revisionNumber: revision.revisionNumber },
+      previous.hash,
+    );
+    return revision;
+  }
+
   async createReport(context: RequestContext, input: ReportInput) {
     requireOwner(context.member.role);
     const data = state();
-    const revisionIds = data.revisions
+    const recordRevisionIds = data.revisions
       .filter((revision) => {
+        if (revision.recordType === "special_arrangement") return false;
         const record = findRecord(data, revision.recordType, revision.recordId);
         if (!record) return false;
         const when =
@@ -638,6 +987,35 @@ export class MemoryParentingRepository implements ParentingRepository {
         );
       })
       .map((revision) => revision.id);
+    const includedArrangementIds = new Set(
+      data.specialArrangements
+      .filter((arrangement) => {
+        const finalized = data.dailyLogs.some(
+          (log) => log.id === arrangement.dailyLogId && log.status === "finalized",
+        );
+        const includedChild =
+          input.childIds.length === 0 ||
+          arrangement.assignments.some((assignment) =>
+            input.childIds.includes(assignment.childId),
+          );
+        return (
+          arrangement.status === "active" &&
+          finalized &&
+          arrangement.localDate >= input.from &&
+          arrangement.localDate <= input.to &&
+          includedChild
+        );
+      })
+      .map((arrangement) => arrangement.id),
+    );
+    const arrangementRevisionIds = data.revisions
+      .filter(
+        (revision) =>
+          revision.recordType === "special_arrangement" &&
+          includedArrangementIds.has(revision.recordId),
+      )
+      .map((revision) => revision.id);
+    const revisionIds = [...recordRevisionIds, ...arrangementRevisionIds];
     const attachments = data.attachments.filter((attachment) =>
       revisionIds.includes(attachment.revisionId),
     );
@@ -876,7 +1254,7 @@ export class MemoryParentingRepository implements ParentingRepository {
 
   private createRevision(
     data: ParentingState,
-    recordType: RecordType,
+    recordType: RevisionRecordType,
     recordId: string,
     payload: Record<string, unknown>,
     authorId: string,

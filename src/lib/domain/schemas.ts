@@ -7,6 +7,7 @@ export const careEntrySchema = z
   .object({
     localDate: z.string().date(),
     templateItemId: z.string().optional(),
+    arrangementTaskId: z.string().optional(),
     taskKey: z.enum([
       "wake_up",
       "get_dressed",
@@ -197,6 +198,157 @@ export const workspaceSettingsSchema = z
     });
   });
 
+const specialArrangementAssignmentSchema = z.object({
+  childId: z.string().min(1),
+  caregiverIds: idArray,
+});
+
+const specialArrangementTaskSchema = z.object({
+  id: z.string().min(1).optional(),
+  sourceRoutineItemId: z.string().min(1).optional(),
+  taskKey: z.enum([
+    "wake_up",
+    "get_dressed",
+    "prepare_breakfast",
+    "prepare_lunch",
+    "school_dropoff",
+    "school_pickup",
+    "prepare_dinner",
+    "time_together",
+    "naptime",
+    "bedtime_pajamas",
+    "bedtime_teeth",
+    "bedtime_story",
+    "clean_spaces",
+    "custom",
+  ]),
+  childId: z.string().min(1),
+  label: z.string().trim().min(2).max(100),
+  suggestedTime: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/),
+});
+
+const specialArrangementFieldsBaseSchema = z.object({
+  title: z.string().trim().min(2).max(120),
+  note: z.string().trim().max(1000).optional(),
+  status: z.enum(["active", "cancelled"]).default("active"),
+  assignments: z.array(specialArrangementAssignmentSchema).min(1),
+  tasks: z.array(specialArrangementTaskSchema).max(500),
+});
+
+function validateSpecialArrangementFields(
+  value: {
+    assignments: z.infer<typeof specialArrangementAssignmentSchema>[];
+    tasks: z.infer<typeof specialArrangementTaskSchema>[];
+  },
+  context: z.RefinementCtx,
+) {
+  const childIds = value.assignments.map((assignment) => assignment.childId);
+  if (new Set(childIds).size !== childIds.length) {
+    context.addIssue({
+      code: "custom",
+      path: ["assignments"],
+      message: "Each child must have one caregiver assignment",
+    });
+  }
+  value.assignments.forEach((assignment, index) => {
+    if (new Set(assignment.caregiverIds).size !== assignment.caregiverIds.length) {
+      context.addIssue({
+        code: "custom",
+        path: ["assignments", index, "caregiverIds"],
+        message: "Caregiver assignments must be unique",
+      });
+    }
+  });
+  if (value.tasks.some((task) => !childIds.includes(task.childId))) {
+    context.addIssue({
+      code: "custom",
+      path: ["tasks"],
+      message: "Each planned task must belong to an assigned child",
+    });
+  }
+}
+
+export const specialArrangementCreateSchema = specialArrangementFieldsBaseSchema
+  .omit({ status: true, tasks: true })
+  .extend({
+    startDate: z.string().date(),
+    endDate: z.string().date(),
+    days: z
+      .array(
+        z.object({
+          localDate: z.string().date(),
+          tasks: z.array(specialArrangementTaskSchema).max(500),
+        }),
+      )
+      .min(1)
+      .max(31),
+  })
+  .superRefine((value, context) => {
+    validateSpecialArrangementFields(
+      {
+        assignments: value.assignments,
+        tasks: value.days.flatMap((day) => day.tasks),
+      },
+      context,
+    );
+    if (value.startDate > value.endDate) {
+      context.addIssue({
+        code: "custom",
+        path: ["endDate"],
+        message: "The end date must be on or after the start date",
+      });
+      return;
+    }
+    const start = Date.parse(`${value.startDate}T12:00:00Z`);
+    const end = Date.parse(`${value.endDate}T12:00:00Z`);
+    const expectedDays = Math.round((end - start) / 86_400_000) + 1;
+    if (expectedDays > 31) {
+      context.addIssue({
+        code: "custom",
+        path: ["endDate"],
+        message: "Special arrangements can cover up to 31 days",
+      });
+    }
+    const dates = value.days.map((day) => day.localDate);
+    if (
+      dates.length !== expectedDays ||
+      new Set(dates).size !== dates.length ||
+      dates.some((date) => date < value.startDate || date > value.endDate)
+    ) {
+      context.addIssue({
+        code: "custom",
+        path: ["days"],
+        message: "Include one task plan for every date in the range",
+      });
+    }
+    const assignedChildren = new Set(
+      value.assignments.map((assignment) => assignment.childId),
+    );
+    value.days.forEach((day, dayIndex) => {
+      if (day.tasks.some((task) => !assignedChildren.has(task.childId))) {
+        context.addIssue({
+          code: "custom",
+          path: ["days", dayIndex, "tasks"],
+          message: "Each planned task must belong to an assigned child",
+        });
+      }
+    });
+  });
+
+export const specialArrangementUpdateSchema = specialArrangementFieldsBaseSchema
+  .extend({
+    recordId: z.string().min(1),
+  })
+  .superRefine(validateSpecialArrangementFields);
+
+export const specialArrangementCorrectionSchema =
+  specialArrangementFieldsBaseSchema
+    .extend({
+      recordId: z.string().min(1),
+      reason: z.string().trim().min(5).max(500),
+    })
+    .superRefine(validateSpecialArrangementFields);
+
 export const purgeSchema = z.object({
   recordType: z.enum(["care_entry", "appointment", "incident"]),
   recordId: z.string().min(1),
@@ -212,3 +364,12 @@ export type IncidentInput = z.infer<typeof incidentSchema>;
 export type CorrectionInput = z.infer<typeof correctionSchema>;
 export type ReportInput = z.infer<typeof reportSchema>;
 export type WorkspaceSettingsInput = z.infer<typeof workspaceSettingsSchema>;
+export type SpecialArrangementCreateInput = z.infer<
+  typeof specialArrangementCreateSchema
+>;
+export type SpecialArrangementUpdateInput = z.infer<
+  typeof specialArrangementUpdateSchema
+>;
+export type SpecialArrangementCorrectionInput = z.infer<
+  typeof specialArrangementCorrectionSchema
+>;

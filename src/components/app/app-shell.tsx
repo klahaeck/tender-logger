@@ -5,6 +5,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
   CalendarDays,
+  CalendarRange,
   CircleUserRound,
   ClipboardCheck,
   Clock3,
@@ -30,14 +31,20 @@ const nav = [
   { href: "/app/appointments", label: "Appointments", icon: CalendarDays },
   { href: "/app/incidents", label: "Incidents", icon: ShieldAlert },
   { href: "/app/reports", label: "Reports", icon: FileText },
-  { href: "/app/settings", label: "Settings", icon: Settings },
+  {
+    href: "/app/special-days",
+    label: "Special days",
+    icon: CalendarRange,
+    ownerOnly: true,
+  },
+  { href: "/app/settings", label: "Settings", icon: Settings, ownerOnly: true },
 ];
 
 function Navigation({ onNavigate, role }: { onNavigate?: () => void; role: Member["role"] }) {
   const pathname = usePathname();
   return (
     <nav aria-label="Primary" className="space-y-1">
-      {nav.filter((item) => role === "owner" || item.href !== "/app/settings").map((item) => {
+      {nav.filter((item) => role === "owner" || !item.ownerOnly).map((item) => {
         const active = item.href === "/app" ? pathname === "/app" : pathname.startsWith(item.href);
         return (
           <Link

@@ -49,7 +49,7 @@ export function CareEntryDialog({
   const [selectedCaregivers, setSelectedCaregivers] = useState<string[]>(
     task?.entry?.caregiverIds ??
       (task
-        ? []
+        ? task.plannedCaregiverIds
         : [caregivers.find((item) => item.isOwner)?.id ?? caregivers[0]?.id].filter(Boolean)),
   );
   const [status, setStatus] = useState(task?.entry?.status ?? "completed");
@@ -89,7 +89,8 @@ export function CareEntryDialog({
           })
         : await createCareEntryAction({
             localDate: date,
-            templateItemId: task?.id,
+            templateItemId: task?.templateItemId,
+            arrangementTaskId: task?.arrangementTaskId,
             taskKey: task?.taskKey ?? "custom",
             taskLabel: task?.label ?? formData.get("taskLabel")?.toString(),
             ...details,

@@ -87,6 +87,44 @@ export function ReportDocument({ source }: { source: ReportSource }) {
           <Text>Counts are descriptive only and are not evaluations or parenting scores.</Text>
         </View>
 
+        {source.arrangements.length > 0 && (
+          <View>
+            <Text style={styles.heading}>Planned arrangements</Text>
+            <View style={styles.notice}>
+              <Text>
+                These arrangements describe saved plans and responsibility
+                assignments. They do not establish that the planned care occurred;
+                caregiving records below describe what was entered as having
+                occurred.
+              </Text>
+            </View>
+            {source.arrangements.map((arrangement) => (
+              <View key={arrangement.id} style={styles.row} wrap={false}>
+                <Text style={styles.rowTitle}>{arrangement.title}</Text>
+                <Text style={styles.meta}>
+                  Planned for {arrangement.localDate} · Created{" "}
+                  {formatDateTime(arrangement.createdAt, timezone)} · Last updated{" "}
+                  {formatDateTime(arrangement.updatedAt, timezone)}
+                </Text>
+                {arrangement.assignments.map((assignment) => (
+                  <Text key={assignment.childId}>
+                    Planned responsibility:{" "}
+                    {names([assignment.childId], source.children)} —{" "}
+                    {names(assignment.caregiverIds, source.caregivers)}
+                  </Text>
+                ))}
+                {arrangement.tasks.map((task) => (
+                  <Text key={task.id}>
+                    Planned task: {task.suggestedTime} ·{" "}
+                    {names([task.childId], source.children)} · {task.label}
+                  </Text>
+                ))}
+                {arrangement.note && <Text>Context: {arrangement.note}</Text>}
+              </View>
+            ))}
+          </View>
+        )}
+
         {source.entries.length > 0 && (
           <View>
             <Text style={styles.heading}>Caregiving records</Text>

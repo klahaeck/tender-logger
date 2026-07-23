@@ -3,7 +3,9 @@ import type {
   CareEntry,
   DailyLog,
   Incident,
+  RecordRevision,
   RoutineTemplateItem,
+  SpecialArrangementDay,
   TimelineItem,
 } from "@/lib/domain/types";
 import type { WorkspaceSettingsInput } from "@/lib/domain/schemas";
@@ -121,4 +123,39 @@ export function recordPayload(
   record: CareEntry | Appointment | Incident,
 ): Record<string, unknown> {
   return JSON.parse(JSON.stringify(record)) as Record<string, unknown>;
+}
+
+export function arrangementAtIncludedRevision(
+  arrangement: SpecialArrangementDay,
+  revisions: RecordRevision[],
+): SpecialArrangementDay | null {
+  const revision = revisions
+    .filter(
+      (item) =>
+        item.recordType === "special_arrangement" &&
+        item.recordId === arrangement.id,
+    )
+    .sort((a, b) => b.revisionNumber - a.revisionNumber)[0];
+  if (!revision) return null;
+
+  return {
+    ...arrangement,
+    ...(revision.payload as Partial<SpecialArrangementDay>),
+    currentRevisionId: revision.id,
+  };
+}
+
+export function arrangementForChildren(
+  arrangement: SpecialArrangementDay,
+  childIds: string[],
+): SpecialArrangementDay {
+  if (childIds.length === 0) return arrangement;
+  const included = new Set(childIds);
+  return {
+    ...arrangement,
+    assignments: arrangement.assignments.filter((assignment) =>
+      included.has(assignment.childId),
+    ),
+    tasks: arrangement.tasks.filter((task) => included.has(task.childId)),
+  };
 }

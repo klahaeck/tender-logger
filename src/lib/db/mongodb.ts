@@ -76,5 +76,12 @@ export async function ensureMongoIndexes(): Promise<void> {
       { workspaceId: 1, localDate: 1 },
       { unique: true },
     ),
+    db.collection("specialArrangementDays").createIndex(
+      { workspaceId: 1, localDate: 1 },
+      { unique: true, name: "special_arrangement_workspace_date_unique" },
+    ),
+    db
+      .collection("specialArrangementDays")
+      .createIndex({ workspaceId: 1, seriesId: 1, localDate: 1 }),
   ]);
 }

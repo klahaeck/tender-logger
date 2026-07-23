@@ -7,6 +7,7 @@ It is a recordkeeping tool, not legal advice, an emergency service, or a guarant
 ## What is implemented
 
 - Per-child daily routine templates and a fast “Today” checklist
+- Date-range special arrangements with per-child responsibility and independent daily task snapshots
 - An isolated private workspace for every authenticated owner account
 - Previous-day navigation with historical templates, future-date prevention, and a next-calendar-day grace period before late-entry labeling
 - Caregiver attribution, actual occurrence time, duration, outcomes, and factual notes
@@ -59,7 +60,7 @@ Vercel Workflows use the deployment’s managed workflow backend automatically. 
 
 ## Data integrity model
 
-Care records are editable while their daily log is open. Finalization locks the current revision; later changes create a new correction containing the previous revision ID, reason, author, server timestamp, and a hash of the canonical payload plus the previous hash. Reports capture the included revision and attachment IDs at creation time.
+Care records and special arrangements are editable while their daily log is open. Finalization locks the current revision; later changes create a new correction containing the previous revision ID, reason, author, server timestamp, and a hash of the canonical payload plus the previous hash. Reports capture the included revision and attachment IDs at creation time. Special arrangements are planned context, not evidence that care occurred.
 
 The integrity controls are tamper-evident application safeguards, not a claim that the system is tamper-proof or that a report is self-authenticating. Export packages include the underlying manifest and checksums so an attorney can evaluate and preserve them with the originals.
 

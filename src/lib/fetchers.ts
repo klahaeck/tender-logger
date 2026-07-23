@@ -3,6 +3,7 @@ import type {
   DashboardData,
   Incident,
   ReportSnapshot,
+  SpecialArrangementsData,
   TimelineData,
 } from "@/lib/domain/types";
 
@@ -18,3 +19,5 @@ export const fetchTimeline = () => getJson<TimelineData>("/api/timeline");
 export const fetchAppointments = () => getJson<Appointment[]>("/api/appointments");
 export const fetchIncidents = () => getJson<Incident[]>("/api/incidents");
 export const fetchReports = () => getJson<ReportSnapshot[]>("/api/reports");
+export const fetchSpecialArrangements = () =>
+  getJson<SpecialArrangementsData>("/api/special-arrangements");

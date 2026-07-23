@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it } from "vitest";
+import JSZip from "jszip";
 
 import { MemoryParentingRepository, resetMemoryRepository } from "@/lib/repository/memory-repository";
 import type { Identity } from "@/lib/auth/identity";
@@ -6,6 +7,7 @@ import type { Attachment } from "@/lib/domain/types";
 import { generateEvidencePackage } from "@/lib/reporting/generate-package";
 import { getPrivateFile } from "@/lib/storage/private-files";
 import { localDateInTimezone, shiftLocalDate } from "@/lib/domain/dates";
+import { createArrangementTasksForDate } from "@/lib/domain/arrangements";
 
 const identity: Identity = {
   authUserId: "demo_owner",
@@ -596,6 +598,223 @@ describe("memory repository integration", () => {
     expect(pdf?.body.length).toBeGreaterThan(500);
     expect(zip?.contentType).toBe("application/zip");
     expect(artifacts.manifestHash).toHaveLength(64);
+  });
+
+  it("plans, edits, finalizes, corrects, cancels, and reports special arrangements", async () => {
+    const repository = new MemoryParentingRepository();
+    const context = await repository.resolveContext(identity);
+    const settings = await repository.getSettings(context);
+    const dates = ["2026-07-24", "2026-07-25", "2026-07-26"];
+    const assignments = [
+      {
+        childId: settings.children[0].id,
+        caregiverIds: [settings.caregivers[0].id],
+      },
+    ];
+    const created = await repository.createSpecialArrangement(context, {
+      title: "Camping weekend",
+      startDate: dates[0],
+      endDate: dates[2],
+      assignments,
+      days: dates.map((localDate) => ({
+        localDate,
+        tasks: createArrangementTasksForDate(
+          localDate,
+          settings.template,
+          settings.children,
+        ),
+      })),
+    });
+
+    expect(created).toHaveLength(3);
+    expect(new Set(created.map((day) => day.seriesId)).size).toBe(1);
+    expect(created[0].tasks.every((task) => task.childId === settings.children[0].id)).toBe(
+      true,
+    );
+    const finalDayLabels = created[2].tasks.map((task) => task.label);
+    await repository.updateSettings(context, {
+      name: settings.workspace.name,
+      timezone: settings.workspace.timezone,
+      hardDeleteEnabled: settings.workspace.hardDeleteEnabled,
+      children: settings.children.map((child) => ({
+        id: child.id,
+        displayName: child.displayName,
+        birthdate: child.birthdate,
+      })),
+      caregivers: settings.caregivers.map((caregiver) => ({
+        id: caregiver.id,
+        displayName: caregiver.displayName,
+        relationship: caregiver.relationship,
+      })),
+      routineItems: settings.template.items.map((item, index) => ({
+        id: item.id,
+        label: index === 0 ? "Changed after planning" : item.label,
+        suggestedTime: item.suggestedTime,
+        childIds: item.childIds,
+        weekdays: item.weekdays,
+        active: item.active,
+      })),
+    });
+    expect(
+      (await repository.getDashboard(context, dates[2])).tasks.map(
+        (task) => task.label,
+      ),
+    ).toEqual(finalDayLabels);
+    const firstDashboard = await repository.getDashboard(context, dates[0]);
+    expect(firstDashboard.specialArrangement?.title).toBe("Camping weekend");
+    expect(firstDashboard.tasks[0]).toMatchObject({
+      source: "special_arrangement",
+      plannedCaregiverIds: [settings.caregivers[0].id],
+    });
+    const firstTask = firstDashboard.tasks[0];
+    const arrangementEntry = await repository.createCareEntry(context, {
+      localDate: dates[0],
+      arrangementTaskId: firstTask.arrangementTaskId,
+      taskKey: "custom",
+      taskLabel: "Client-supplied label",
+      childIds: firstTask.childIds,
+      caregiverIds: [settings.caregivers[1].id],
+      status: "completed",
+      occurredAt: `${dates[0]}T13:00:00.000Z`,
+    });
+    expect(arrangementEntry).toMatchObject({
+      arrangementTaskId: firstTask.arrangementTaskId,
+      taskKey: firstTask.taskKey,
+      taskLabel: firstTask.label,
+      caregiverIds: [settings.caregivers[1].id],
+    });
+    expect(
+      (await repository.getDashboard(context, dates[0])).tasks[0].entry?.id,
+    ).toBe(arrangementEntry.id);
+    await expect(
+      repository.createCareEntry(context, {
+        localDate: dates[0],
+        arrangementTaskId: "arrangement_task_other_workspace",
+        taskKey: "custom",
+        taskLabel: "Invalid task",
+        childIds: firstTask.childIds,
+        caregiverIds: [settings.caregivers[0].id],
+        status: "completed",
+        occurredAt: `${dates[0]}T14:00:00.000Z`,
+      }),
+    ).rejects.toThrow("INVALID_ARRANGEMENT_TASK");
+
+    const originalRevisionId = created[0].currentRevisionId;
+    const updated = await repository.updateSpecialArrangement(context, {
+      recordId: created[0].id,
+      title: "Camping weekend updated",
+      status: "active",
+      assignments,
+      tasks: created[0].tasks.map((task) => ({
+        id: task.id,
+        sourceRoutineItemId: task.sourceRoutineItemId,
+        taskKey: task.taskKey,
+        childId: task.childId,
+        label: task.label,
+        suggestedTime: task.suggestedTime,
+      })),
+    });
+    expect(updated.currentRevisionId).toBe(originalRevisionId);
+
+    await repository.finalizeDailyLog(context, dates[0]);
+    await expect(
+      repository.updateSpecialArrangement(context, {
+        recordId: created[0].id,
+        title: "Direct edit should fail",
+        status: "active",
+        assignments,
+        tasks: updated.tasks,
+      }),
+    ).rejects.toThrow("DAY_FINALIZED");
+    const correction = await repository.correctSpecialArrangement(context, {
+      recordId: created[0].id,
+      title: "Corrected camping weekend",
+      status: "active",
+      assignments,
+      tasks: updated.tasks,
+      reason: "Corrected the arrangement title.",
+    });
+    expect(correction.previousRevisionId).toBe(originalRevisionId);
+    expect(correction.revisionNumber).toBe(2);
+
+    await repository.updateSpecialArrangement(context, {
+      recordId: created[1].id,
+      title: created[1].title,
+      status: "cancelled",
+      assignments,
+      tasks: created[1].tasks,
+    });
+    expect(
+      (await repository.getDashboard(context, dates[1])).specialArrangement,
+    ).toBeUndefined();
+
+    await expect(
+      repository.createSpecialArrangement(context, {
+        title: "Overlapping plan",
+        startDate: dates[2],
+        endDate: dates[2],
+        assignments,
+        days: [{ localDate: dates[2], tasks: [] }],
+      }),
+    ).rejects.toThrow("ARRANGEMENT_CONFLICT");
+
+    const report = await repository.createReport(context, {
+      from: dates[0],
+      to: dates[2],
+      childIds: [],
+      includeCare: true,
+      includeAppointments: true,
+      includeIncidents: true,
+    });
+    await repository.correctSpecialArrangement(context, {
+      recordId: created[0].id,
+      title: "Changed after report creation",
+      status: "active",
+      assignments,
+      tasks: updated.tasks,
+      reason: "Verify that an existing report keeps its prior snapshot.",
+    });
+    const source = await repository.getReportSource(context, report.id);
+    expect(source?.arrangements.map((arrangement) => arrangement.id)).toEqual([
+      created[0].id,
+    ]);
+    expect(source?.arrangements[0]).toMatchObject({
+      title: "Corrected camping weekend",
+      currentRevisionId: correction.id,
+    });
+    expect(
+      source?.revisions.filter(
+        (revision) => revision.recordType === "special_arrangement",
+      ),
+    ).toHaveLength(2);
+    const artifacts = await generateEvidencePackage(source!);
+    const zipFile = await getPrivateFile(artifacts.zipPathname);
+    const zip = await JSZip.loadAsync(zipFile!.body);
+    const manifest = JSON.parse(
+      await zip.file("manifest.json")!.async("string"),
+    ) as {
+      schemaVersion: number;
+      plannedArrangementNotice: string;
+      plannedArrangements: Array<{
+        currentRevisionId: string;
+        title: string;
+      }>;
+      revisions: Array<{ id: string; sha256: string }>;
+    };
+    expect(manifest).toMatchObject({
+      schemaVersion: 2,
+      plannedArrangementNotice:
+        "Planned arrangements are context only and do not establish that care occurred.",
+      plannedArrangements: [
+        {
+          currentRevisionId: correction.id,
+          title: "Corrected camping weekend",
+        },
+      ],
+    });
+    expect(
+      manifest.revisions.find((revision) => revision.id === correction.id)?.sha256,
+    ).toHaveLength(64);
   });
 
   it("allows an owner without MFA to run an enabled hard purge and retains a content-free tombstone", async () => {
